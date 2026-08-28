@@ -17,6 +17,41 @@ BEGIN
     PUSHBUTTON      "취소", IDCANCEL, 152, 48, 50, 15
 END
 
+// Every string here is replaced at runtime by the translated one, so the text
+// below only matters if the dialog somehow shows before I18nInit.
+IDD_ABOUT DIALOGEX 0, 0, 240, 280
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "앱 정보"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    ICON            IDI_APPICON, IDC_AB_ICON, 12, 10, 20, 20
+    LTEXT           "DeskNoise", IDC_AB_TITLE, 42, 14, 186, 14
+
+    LTEXT           "버전", IDC_AB_VER_L, 12, 38, 216, 9
+    LTEXT           "", IDC_AB_VER, 12, 49, 216, 10
+
+    LTEXT           "제작자", IDC_AB_AUTHOR_L, 12, 66, 216, 9
+    LTEXT           "", IDC_AB_AUTHOR, 12, 77, 216, 10
+
+    LTEXT           "배포일", IDC_AB_DATE_L, 12, 94, 216, 9
+    LTEXT           "", IDC_AB_DATE, 12, 105, 216, 10
+
+    LTEXT           "GitHub", IDC_AB_GITHUB_L, 12, 122, 216, 9
+    CONTROL         "", IDC_AB_GITHUB, "SysLink", 0, 12, 133, 216, 10
+
+    LTEXT           "같은 개발자의 다른 도구", IDC_AB_TOOLS_L, 12, 150, 216, 9
+    CONTROL         "", IDC_AB_TOOLS, "SysLink", 0, 12, 161, 216, 10
+
+    LTEXT           "라이선스 요약", IDC_AB_LIC_L, 12, 178, 216, 9
+    LTEXT           "", IDC_AB_LIC, 12, 189, 216, 22
+
+    LTEXT           "안내", IDC_AB_NOTE_L, 12, 216, 216, 9
+    LTEXT           "", IDC_AB_NOTE, 12, 227, 216, 30
+
+    PUSHBUTTON      "이메일 주소 복사", IDC_AB_COPY, 96, 260, 76, 14
+    DEFPUSHBUTTON   "닫기", IDOK, 178, 260, 50, 14
+END
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION    APP_VER_MAJOR,APP_VER_MINOR,APP_VER_PATCH,0
  PRODUCTVERSION APP_VER_MAJOR,APP_VER_MINOR,APP_VER_PATCH,0
