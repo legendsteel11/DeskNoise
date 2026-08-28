@@ -1,0 +1,15 @@
+# Local-only notes: requirements, release copy, private context. Never pushed.
+_local/
+
+# Build output
+build/
+releases/
+
+# MSVC
+*.obj
+*.res
+*.pdb
+*.ilk
+*.exe
+*.idb
+.vs/

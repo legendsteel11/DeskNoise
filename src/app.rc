@@ -1,0 +1,45 @@
+#pragma code_page(65001)
+#include <windows.h>
+#include "resource.h"
+
+IDI_APPICON ICON "icon.ico"
+
+1 RT_MANIFEST "app.manifest"
+
+IDD_PRESETNAME DIALOGEX 0, 0, 214, 68
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "프리셋 저장"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "이름", IDC_PRESET_NAME_LBL, 12, 12, 60, 10
+    EDITTEXT        IDC_PRESET_NAME, 12, 26, 190, 14, ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "저장", IDOK, 96, 48, 50, 15
+    PUSHBUTTON      "취소", IDCANCEL, 152, 48, 50, 15
+END
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    APP_VER_MAJOR,APP_VER_MINOR,APP_VER_PATCH,0
+ PRODUCTVERSION APP_VER_MAJOR,APP_VER_MINOR,APP_VER_PATCH,0
+ FILEFLAGSMASK  0x3fL
+ FILEFLAGS      0x0L
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041204B0"
+        BEGIN
+            VALUE "FileDescription", "DeskNoise"
+            VALUE "FileVersion",     APP_VERSION_STR
+            VALUE "InternalName",    "DeskNoise"
+            VALUE "OriginalFilename","DeskNoise.exe"
+            VALUE "ProductName",     "DeskNoise"
+            VALUE "ProductVersion",  APP_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x412, 1200
+    END
+END
