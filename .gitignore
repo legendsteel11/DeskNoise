@@ -13,3 +13,8 @@ releases/
 *.exe
 *.idb
 .vs/
+
+# Source artwork. The exported PNG and the built .ico are enough to build.
+*.ai
+*.psd
+*.psb
