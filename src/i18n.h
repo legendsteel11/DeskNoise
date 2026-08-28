@@ -65,8 +65,7 @@
     X(S_CANCEL,             L"취소",                                 L"Cancel")                     \
     X(S_NAME,               L"이름",                                 L"Name")                       \
     X(S_DLG_SAVE_PRESET,    L"프리셋 저장",                          L"Save preset")                \
-    X(S_LAYERS_HINT,        L"소리 레이어  (체크한 것이 함께 재생됩니다)", \
-                            L"Sound layers  (checked layers play together)")                        \
+    X(S_LAYERS_HINT,        L"소리 레이어",                          L"Sound layers")               \
     /* box captions, drawn sitting on the box border */                                            \
     X(S_FMT_BOX_LAYER,      L"소리 레이어 %d 설정",                  L"Sound layer %d")             \
     X(S_BOX_COMMON,         L"공통 설정",                            L"Overall")                    \
@@ -85,11 +84,26 @@
     X(S_NONE,               L"없음",                                 L"None")                       \
     X(S_FMT_MINUTES,        L"%d분",                                 L"%d min")                     \
     /* checkboxes and tray menu */                                                                 \
-    X(S_STARTUP,            L"Windows 시작 시 실행",                 L"Run at Windows startup")     \
-    X(S_AUTOPLAY,           L"실행하면 바로 재생",                   L"Play on launch")             \
     X(S_HIDE_TRAY,          L"트레이로 숨기기",                      L"Hide to tray")               \
     X(S_TRAY_SHOW,          L"창 열기",                              L"Open window")                \
-    X(S_TRAY_EXIT,          L"종료",                                 L"Exit")
+    X(S_TRAY_RESTART,       L"다시 시작",                            L"Restart")                    \
+    X(S_TRAY_EXIT,          L"종료",                                 L"Exit")                       \
+    /* about box */                                                                                \
+    X(S_ABOUT,              L"앱 정보",                              L"About")                      \
+    X(S_AB_VERSION,         L"버전",                                 L"Version")                    \
+    X(S_AB_AUTHOR,          L"제작자",                               L"Author")                     \
+    X(S_AB_DATE,            L"배포일",                               L"Released")                   \
+    X(S_AB_GITHUB,          L"GitHub",                               L"GitHub")                     \
+    X(S_AB_TOOLS,           L"같은 개발자의 다른 도구",              L"Other tools by the same developer") \
+    X(S_AB_LICENSE,         L"라이선스 요약",                        L"License")                    \
+    X(S_AB_LICENSE_TEXT,    L"MIT 라이선스. 별도의 보증 없이 있는 그대로 제공되며, 사용에 따른 책임은 사용자 본인에게 있습니다.", \
+                            L"MIT License. Provided as is, without warranty of any kind. You are responsible for how you use it.") \
+    X(S_AB_NOTE,            L"안내",                                 L"Notice")                     \
+    X(S_AB_NOTE_TEXT,       L"이 프로그램은 의료기기가 아니며 질병의 진단이나 치료를 위한 것이 아닙니다. 소리는 편안하게 들리는 크기로 사용하십시오.", \
+                            L"DeskNoise is not a medical device and is not intended to diagnose or treat any condition. Keep the volume at a comfortable level.") \
+    X(S_AB_COPY_MAIL,       L"이메일 주소 복사",                     L"Copy email address")         \
+    X(S_AB_COPIED,          L"복사했습니다",                         L"Copied")                     \
+    X(S_CLOSE,              L"닫기",                                 L"Close")
 
 enum StrId {
 #define DESKNOISE_ENUM(id, ko, en) id,

@@ -43,7 +43,7 @@ enum {
     IDC_LAYER_EN = 1100,    // +0..kMaxLayers
     IDC_LAYER_SEL = 1110,   // +0..kMaxLayers
     IDM_TRAY_TOGGLE = 2001, IDM_TRAY_SHOW, IDM_TRAY_EXIT,
-    IDM_TRAY_STARTUP, IDM_TRAY_AUTOPLAY
+    IDM_TRAY_ABOUT, IDM_TRAY_RESTART
 };
 
 // Layout grid. The left gutter holds a checkbox now and can hold a small icon
@@ -111,6 +111,8 @@ static ULONGLONG   g_playedMs = 0;       // playing time so far in this session,
 static ULONGLONG   g_playSince = 0;      // start of the current play phase, 0 while not playing
 static WCHAR       g_iniPath[MAX_PATH] = {};
 static int         g_fileVer = CONFIG_VER;   // config version as found on disk
+static HANDLE      g_mutex = nullptr;        // single-instance guard, released on restart
+static WCHAR       g_cmdLine[256] = {};      // kept so a restart can pass the same switches
 static LayerCfg    g_layer[kMaxLayers] = {};
 static int         g_sel = 0;            // layer being edited
 static WCHAR       g_nameBuf[64] = {};
@@ -125,7 +127,6 @@ static HWND hLblBoxA, hLblBoxB;
 
 // Defined with the other frame drawing, but needed by the label updates above it.
 static void FitCaption(HWND h, LPCWSTR text, int x, int boxTop);
-static bool g_autoplay = false;   // moved off screen into the tray menu
 
 // ---------------------------------------------------------------- conversions
 
@@ -342,33 +343,16 @@ static void LayersFromIni(LPCWSTR sec, LayerCfg L[kMaxLayers])
 
 // ---------------------------------------------------------------- run at startup
 
-static bool IsStartupEnabled()
-{
-    HKEY k = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &k) != ERROR_SUCCESS)
-        return false;
-    bool found = (RegQueryValueExW(k, RUN_VALUE, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS);
-    RegCloseKey(k);
-    return found;
-}
-
-static void SetStartupEnabled(bool on)
+// "Run at Windows startup" is gone, but an earlier build may have written the
+// Run value. Without this an old user would keep launching at boot with nothing
+// in the app to turn it off. Runs once per start and costs nothing when absent.
+static void ClearStartupEntry()
 {
     HKEY k = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &k) != ERROR_SUCCESS)
         return;
-    if (on) {
-        WCHAR exe[MAX_PATH] = {}, cmd[MAX_PATH + 16] = {};
-        GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        wsprintfW(cmd, L"\"%s\" /tray", exe);
-        RegSetValueExW(k, RUN_VALUE, 0, REG_SZ, (const BYTE*)cmd,
-            (DWORD)((lstrlenW(cmd) + 1) * sizeof(WCHAR)));
-    }
-    else {
-        RegDeleteValueW(k, RUN_VALUE);
-    }
+    RegDeleteValueW(k, RUN_VALUE);
     RegCloseKey(k);
 }
 
@@ -1276,7 +1260,6 @@ static void LoadSettings()
     SendMessageW(hRestMin, CB_SETCURSEL, ri, 0);
     SendMessageW(hMaster, TBM_SETPOS, TRUE,
         PctToPos((int)Clamp(IniGetInt(L"main", L"master", 100), 0, 100)));
-    g_autoplay = IniGetInt(L"main", L"autoplay", 0) != 0;
     g_updating = false;
 
     EnableWindow(hRestMin, SelPlayMin() != 0);
@@ -1296,25 +1279,128 @@ static void SaveSettings()
     IniSetInt(L"main", L"playmin", (int)SendMessageW(hPlayMin, CB_GETCURSEL, 0, 0));
     IniSetInt(L"main", L"restmin", (int)SendMessageW(hRestMin, CB_GETCURSEL, 0, 0));
     IniSetInt(L"main", L"master", PctFromPos((int)SendMessageW(hMaster, TBM_GETPOS, 0, 0)));
-    IniSetInt(L"main", L"autoplay", g_autoplay ? 1 : 0);
     IniSetInt(L"main", L"sel", g_sel);
 }
 
 // ---------------------------------------------------------------- window procedure
+
+// ---------------------------------------------------------------- about box
+
+static void CopyToClipboard(HWND owner, LPCWSTR text)
+{
+    if (!OpenClipboard(owner)) return;
+    EmptyClipboard();
+    const SIZE_T bytes = ((SIZE_T)lstrlenW(text) + 1) * sizeof(WCHAR);
+    HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (mem) {
+        void* p = GlobalLock(mem);
+        if (p) {
+            memcpy(p, text, bytes);
+            GlobalUnlock(mem);
+            SetClipboardData(CF_UNICODETEXT, mem);   // clipboard owns it now
+        }
+        else GlobalFree(mem);
+    }
+    CloseClipboard();
+}
+
+static INT_PTR CALLBACK AboutProc(HWND h, UINT m, WPARAM w, LPARAM lp)
+{
+    switch (m) {
+    case WM_INITDIALOG: {
+        SetWindowTextW(h, T(S_ABOUT));
+        SendDlgItemMessageW(h, IDC_AB_ICON, STM_SETICON,
+            (WPARAM)LoadAppIcon(S(32), S(32)), 0);
+        SetDlgItemTextW(h, IDC_AB_TITLE, APP_TITLE);
+
+        SetDlgItemTextW(h, IDC_AB_VER_L, T(S_AB_VERSION));
+        SetDlgItemTextW(h, IDC_AB_VER, APP_VERSION_STRW);
+        SetDlgItemTextW(h, IDC_AB_AUTHOR_L, T(S_AB_AUTHOR));
+        SetDlgItemTextW(h, IDC_AB_AUTHOR, APP_AUTHOR_MAIL);
+        SetDlgItemTextW(h, IDC_AB_DATE_L, T(S_AB_DATE));
+        SetDlgItemTextW(h, IDC_AB_DATE, APP_RELEASE_DATE_W);
+
+        WCHAR link[256];
+        SetDlgItemTextW(h, IDC_AB_GITHUB_L, T(S_AB_GITHUB));
+        swprintf_s(link, L"<a href=\"%s\">%s</a>", APP_REPO_URL, APP_REPO_TEXT);
+        SetDlgItemTextW(h, IDC_AB_GITHUB, link);
+
+        SetDlgItemTextW(h, IDC_AB_TOOLS_L, T(S_AB_TOOLS));
+        swprintf_s(link, L"<a href=\"%s\">%s</a>", APP_DEV_URL, APP_DEV_TOOLS);
+        SetDlgItemTextW(h, IDC_AB_TOOLS, link);
+
+        SetDlgItemTextW(h, IDC_AB_LIC_L, T(S_AB_LICENSE));
+        SetDlgItemTextW(h, IDC_AB_LIC, T(S_AB_LICENSE_TEXT));
+        SetDlgItemTextW(h, IDC_AB_NOTE_L, T(S_AB_NOTE));
+        SetDlgItemTextW(h, IDC_AB_NOTE, T(S_AB_NOTE_TEXT));
+
+        SetDlgItemTextW(h, IDC_AB_COPY, T(S_AB_COPY_MAIL));
+        SetDlgItemTextW(h, IDOK, T(S_CLOSE));
+        return TRUE;
+    }
+
+    case WM_NOTIFY: {
+        // Both links carry their target in the markup, so open whatever was hit.
+        const NMHDR* nh = (const NMHDR*)lp;
+        if (nh->code == NM_CLICK || nh->code == NM_RETURN) {
+            const NMLINK* nl = (const NMLINK*)lp;
+            if (nl->item.szUrl[0])
+                ShellExecuteW(h, L"open", nl->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_COMMAND:
+        if (LOWORD(w) == IDC_AB_COPY) {
+            CopyToClipboard(h, APP_AUTHOR_MAIL);
+            SetDlgItemTextW(h, IDC_AB_COPY, T(S_AB_COPIED));
+            return TRUE;
+        }
+        if (LOWORD(w) == IDOK || LOWORD(w) == IDCANCEL) { EndDialog(h, IDOK); return TRUE; }
+        break;
+
+    case WM_CLOSE:
+        EndDialog(h, IDOK);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+// Relaunches this executable and lets this instance go. Used after changes that
+// are easier to apply from a clean start than to rewire while running.
+static void RestartApp()
+{
+    WCHAR path[MAX_PATH] = {};
+    if (!GetModuleFileNameW(nullptr, path, ARRAYSIZE(path))) return;
+
+    WCHAR args[64] = {};
+    if (!IsWindowVisible(g_hwnd)) lstrcatW(args, L"/tray ");
+    if (wcsstr(g_cmdLine, L"/lang=ko")) lstrcatW(args, L"/lang=ko");
+    else if (wcsstr(g_cmdLine, L"/lang=en")) lstrcatW(args, L"/lang=en");
+
+    SaveSettings();
+    TrayRemove();
+    // The new process tests the same single-instance mutex. Release it first,
+    // or the new instance would just wake this one and quit.
+    if (g_mutex) { CloseHandle(g_mutex); g_mutex = nullptr; }
+    ShellExecuteW(nullptr, L"open", path, args[0] ? args : nullptr, nullptr, SW_SHOWNORMAL);
+
+    g_realExit = true;
+    DestroyWindow(g_hwnd);
+}
 
 static void ShowTrayMenu()
 {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, IDM_TRAY_TOGGLE, T(g_session ? S_STOP : S_PLAY));
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    // These two used to be checkboxes on the main window.
-    AppendMenuW(m, MF_STRING | (IsStartupEnabled() ? MF_CHECKED : MF_UNCHECKED),
-        IDM_TRAY_STARTUP, T(S_STARTUP));
-    AppendMenuW(m, MF_STRING | (g_autoplay ? MF_CHECKED : MF_UNCHECKED),
-        IDM_TRAY_AUTOPLAY, T(S_AUTOPLAY));
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, IDM_TRAY_SHOW, T(S_TRAY_SHOW));
+    AppendMenuW(m, MF_STRING, IDM_TRAY_ABOUT, T(S_ABOUT));
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, IDM_TRAY_RESTART, T(S_TRAY_RESTART));
     AppendMenuW(m, MF_STRING, IDM_TRAY_EXIT, T(S_TRAY_EXIT));
+    SetMenuDefaultItem(m, IDM_TRAY_TOGGLE, FALSE);
 
     POINT pt; GetCursorPos(&pt);
     SetForegroundWindow(g_hwnd);
@@ -1399,10 +1485,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (id == IDC_FREQ_EDIT && code == EN_KILLFOCUS) { ApplyFreqFromEdit(); return 0; }
         if (id == IDC_PLAY) { ToggleSession(); return 0; }
         if (id == IDC_HIDE) { HideMainWindow(); return 0; }
-        if (id == IDM_TRAY_STARTUP) { SetStartupEnabled(!IsStartupEnabled()); return 0; }
-        if (id == IDM_TRAY_AUTOPLAY) { g_autoplay = !g_autoplay; SaveSettings(); return 0; }
         if (id == IDM_TRAY_TOGGLE) { ToggleSession(); return 0; }
         if (id == IDM_TRAY_SHOW) { ShowMainWindow(); return 0; }
+        if (id == IDM_TRAY_ABOUT) {
+            DialogBoxW(g_inst, MAKEINTRESOURCEW(IDD_ABOUT), g_hwnd, AboutProc);
+            return 0;
+        }
+        if (id == IDM_TRAY_RESTART) { RestartApp(); return 0; }
         if (id == IDM_TRAY_EXIT) { g_realExit = true; DestroyWindow(hwnd); return 0; }
         return 0;
     }
@@ -1518,12 +1607,48 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 // ---------------------------------------------------------------- entry point
 
+// Window-level shortcuts, taken before IsDialogMessage so they work wherever
+// focus happens to sit. The exceptions matter more than the keys themselves:
+// a control that already owns the key keeps it.
+static bool HandleAppKey(const MSG& msg)
+{
+    if (msg.message != WM_KEYDOWN) return false;
+    const HWND f = GetFocus();
+    if (f == hFreqEdit) return false;          // the edit is taking a number
+
+    WCHAR cls[16] = {};
+    GetClassNameW(f, cls, ARRAYSIZE(cls));
+    const bool onCombo = (lstrcmpiW(cls, L"ComboBox") == 0);
+
+    if (msg.wParam == VK_SPACE) {
+        // Space still checks a layer on and off, and still picks from an open list.
+        for (int i = 0; i < kMaxLayers; i++) if (f == hLayerEn[i]) return false;
+        if (onCombo && SendMessageW(f, CB_GETDROPPEDSTATE, 0, 0)) return false;
+        ToggleSession();
+        return true;
+    }
+
+    const bool up = (msg.wParam == VK_OEM_PLUS || msg.wParam == VK_ADD);
+    const bool down = (msg.wParam == VK_OEM_MINUS || msg.wParam == VK_SUBTRACT);
+    if (up || down) {
+        if (onCombo && SendMessageW(f, CB_GETDROPPEDSTATE, 0, 0)) return false;
+        const int now = PctFromPos((int)SendMessageW(hMaster, TBM_GETPOS, 0, 0));
+        const int next = (int)Clamp(now + (up ? 5 : -5), 0, 100);
+        SendMessageW(hMaster, TBM_SETPOS, TRUE, PctToPos(next));
+        ApplyMaster();
+        return true;
+    }
+    return false;
+}
+
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int)
 {
     g_inst = inst;
     I18nInit(cmdLine);
 
-    HANDLE mtx = CreateMutexW(nullptr, FALSE, APP_MUTEX);
+    if (cmdLine) lstrcpynW(g_cmdLine, cmdLine, ARRAYSIZE(g_cmdLine));
+
+    HANDLE mtx = g_mutex = CreateMutexW(nullptr, FALSE, APP_MUTEX);
     if (mtx && GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND prev = FindWindowW(APP_CLASS, nullptr);
         if (prev) PostMessageW(prev, WM_SHOWME, 0, 0);
@@ -1531,9 +1656,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int)
     }
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    INITCOMMONCONTROLSEX ic = { sizeof(ic), ICC_BAR_CLASSES | ICC_STANDARD_CLASSES };
+    INITCOMMONCONTROLSEX ic = { sizeof(ic),
+        ICC_BAR_CLASSES | ICC_STANDARD_CLASSES | ICC_LINK_CLASS };
     InitCommonControlsEx(&ic);
     InitIniPath();
+    ClearStartupEntry();
     DefaultLayers(g_layer);
 
     WNDCLASSEXW wc = {};
@@ -1572,8 +1699,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int)
     const bool startHidden = (cmdLine && wcsstr(cmdLine, L"/tray") != nullptr);
     if (!startHidden) ShowMainWindow();
 
-    if (g_autoplay) SetSession(true);
-    else UpdateStatus();
+    UpdateStatus();
     EnsureTick();
 
     MSG msg;
@@ -1583,6 +1709,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int)
             ApplyFreqFromEdit();
             continue;
         }
+        if (HandleAppKey(msg)) continue;
         if (!IsDialogMessageW(g_hwnd, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
