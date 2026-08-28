@@ -57,3 +57,12 @@ Visual Studio 설치 경로가 기본값과 다르면 `build.bat` 위쪽의 `VS`
 | `src/audio.cpp`, `src/audio.h` | WASAPI 공유 모드 출력과 음원 생성 |
 | `src/i18n.h`, `src/i18n.cpp` | 모든 UI 문자열, 한국어와 영어를 나란히 관리 |
 | `src/app.rc`, `src/resource.h` | 아이콘, 매니페스트, 버전 정보, 프리셋 이름 대화상자 |
+
+## 라이선스
+
+MIT입니다. [LICENSE](LICENSE) 를 참고하십시오.
+
+DeskNoise는 Windows SDK만 사용하며 포함된 외부 코드가 없습니다. 널리 알려진
+알고리즘 두 가지를 발표된 그대로 사용합니다. 핑크 노이즈 필터는 musicdsp.org에
+공개된 Paul Kellett의 방식이고, 대역 통과 필터 계수는 Robert Bristow-Johnson의
+Audio EQ Cookbook을 따릅니다. 둘 다 저자가 공개 도메인으로 배포한 것입니다.

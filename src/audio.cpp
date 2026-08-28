@@ -310,6 +310,8 @@ void AudioEngine::updateBiquad(LayerState& s, float f0, float bwOct)
     if (f0 > nyq * 0.94) f0 = (float)(nyq * 0.94);
     if (bwOct < 0.02f) bwOct = 0.02f;
 
+    // Band-pass coefficients follow the Audio EQ Cookbook by Robert
+    // Bristow-Johnson, which its author placed in the public domain.
     const double w0 = kTwoPi * f0 / sr_;
     const double sn = sin(w0), cs = cos(w0);
     const double alpha = sn * sinh(0.34657359027997264 * bwOct * w0 / sn);  // ln(2)/2
@@ -348,7 +350,7 @@ float AudioEngine::bandPass(LayerState& s, float x0, float bwOct)
 
 float AudioEngine::genLayer(LayerState& s, int mode, float bwOct, float beatHz)
 {
-    // white noise (xorshift32)
+    // white noise (xorshift32, after Marsaglia)
     s.rng ^= s.rng << 13; s.rng ^= s.rng >> 17; s.rng ^= s.rng << 5;
     const float w = (float)(int)s.rng * (1.0f / 2147483648.0f);
 
@@ -376,6 +378,9 @@ float AudioEngine::genLayer(LayerState& s, int mode, float bwOct, float beatHz)
         return bandPass(s, w * 0.5f, bwOct);
 
     case MODE_PINK: {
+        // Paul Kellett's refined pink-noise filter, posted to musicdsp.org as
+        // public domain. Six one-pole sections summed to approximate -3 dB per
+        // octave across the audible range.
         s.pink[0] = 0.99886f * s.pink[0] + w * 0.0555179f;
         s.pink[1] = 0.99332f * s.pink[1] + w * 0.0750759f;
         s.pink[2] = 0.96900f * s.pink[2] + w * 0.1538520f;

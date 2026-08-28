@@ -59,3 +59,13 @@ Settings and presets are kept in `%APPDATA%\DeskNoise\config.ini`.
 | `src/audio.cpp`, `src/audio.h` | WASAPI shared-mode output and sound generation. |
 | `src/i18n.h`, `src/i18n.cpp` | Every UI string, Korean and English side by side. |
 | `src/app.rc`, `src/resource.h` | Icon, manifest, version and the preset-name dialog. |
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+DeskNoise builds against the Windows SDK and carries no bundled third-party
+code. Two well-known algorithms are used as published: the pink-noise filter is
+Paul Kellett's refined method from musicdsp.org, and the band-pass coefficients
+follow Robert Bristow-Johnson's Audio EQ Cookbook. Both were placed in the
+public domain by their authors.
