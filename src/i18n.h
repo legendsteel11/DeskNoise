@@ -25,6 +25,7 @@
     /* master volume */                                                                            \
     X(S_MASTER_MUTE,        L"전체 음량 : 무음",                     L"Master volume: muted")       \
     X(S_FMT_MASTER,         L"전체 음량 : %d%%  (%.1f dB)",          L"Master volume: %d%%  (%.1f dB)") \
+    X(S_FMT_MASTER_FADE,    L"전체 음량 : %d%%  ·  자동 줄임 설정됨", L"Master volume: %d%%  ·  fade out set") \
     /* status line */                                                                              \
     X(S_STOPPED,            L"정지됨",                               L"Stopped")                    \
     X(S_RESTING,            L"휴식 중",                              L"Resting")                    \
@@ -48,9 +49,9 @@
     /* editor labels */                                                                            \
     X(S_VOL_MUTE,           L"음량 : 무음",                          L"Volume: muted")              \
     X(S_FMT_VOL,            L"음량 : %d%%  (%.1f dB)",               L"Volume: %d%%  (%.1f dB)")    \
-    X(S_BAL_CENTER,         L"좌우 : 중앙",                          L"Balance: center")            \
-    X(S_FMT_BAL_LEFT,       L"좌우 : 왼쪽 %d%%",                     L"Balance: left %d%%")         \
-    X(S_FMT_BAL_RIGHT,      L"좌우 : 오른쪽 %d%%",                   L"Balance: right %d%%")        \
+    X(S_BAL_CENTER,         L"밸런스 : 중앙",                        L"Balance: center")            \
+    X(S_FMT_BAL_LEFT,       L"밸런스 : 왼쪽 %d%%",                   L"Balance: left %d%%")         \
+    X(S_FMT_BAL_RIGHT,      L"밸런스 : 오른쪽 %d%%",                 L"Balance: right %d%%")        \
     /* presets */                                                                                  \
     X(S_PRESET,             L"프리셋",                               L"Preset")                     \
     X(S_PRESET_CUSTOM,      L"(직접 설정)",                          L"(custom)")                   \
@@ -74,17 +75,18 @@
     X(S_BANDWIDTH,          L"대역폭",                               L"Bandwidth")                  \
     X(S_BEAT,               L"흔들림",                               L"Wobble")                     \
     X(S_VOLUME,             L"음량",                                 L"Volume")                     \
-    X(S_BALANCE,            L"좌우",                                 L"Balance")                    \
+    X(S_BALANCE,            L"밸런스",                               L"Balance")                    \
     X(S_MASTER,             L"전체 음량",                            L"Master volume")              \
     X(S_PLAY,               L"재생",                                 L"Play")                       \
     X(S_STOP,               L"정지",                                 L"Stop")                       \
     X(S_REST,               L"휴식",                                 L"Rest")                       \
+    X(S_FADE,               L"자동 줄임",                            L"Fade out")                   \
     /* play and rest duration combos */                                                            \
     X(S_CONTINUOUS,         L"계속",                                 L"Continuous")                 \
     X(S_NONE,               L"없음",                                 L"None")                       \
     X(S_FMT_MINUTES,        L"%d분",                                 L"%d min")                     \
     /* checkboxes and tray menu */                                                                 \
-    X(S_HIDE_TRAY,          L"트레이로 숨기기",                      L"Hide to tray")               \
+    X(S_HIDE_TRAY,          L"트레이로",                             L"To tray")                    \
     X(S_TRAY_SHOW,          L"창 열기",                              L"Open window")                \
     X(S_TRAY_RESTART,       L"다시 시작",                            L"Restart")                    \
     X(S_TRAY_EXIT,          L"종료",                                 L"Exit")                       \

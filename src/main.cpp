@@ -23,9 +23,9 @@
 
 // Title bar text. Debug builds are tagged so the running build is obvious.
 #ifdef _DEBUG
-#define APP_CAPTION APP_TITLE L" -v" APP_VERSION_STRW L"(Debug)"
+#define APP_CAPTION APP_TITLE L" v" APP_VERSION_STRW L" (Debug)"
 #else
-#define APP_CAPTION APP_TITLE L" -v" APP_VERSION_STRW
+#define APP_CAPTION APP_TITLE L" v" APP_VERSION_STRW
 #endif
 
 #define WM_TRAY        (WM_APP + 1)
@@ -36,7 +36,7 @@ enum {
     IDC_PRESET_COMBO = 1001, IDC_PRESET_SAVE, IDC_PRESET_DEL,
     IDC_MODE, IDC_FREQ_SLIDER, IDC_FREQ_EDIT, IDC_BW_SLIDER, IDC_VOL_SLIDER, IDC_BAL_SLIDER,
     IDC_BEAT_SLIDER, IDC_CHK_BEAT,
-    IDC_PLAYMIN, IDC_RESTMIN, IDC_PLAY, IDC_HIDE, IDC_STATUS,
+    IDC_PLAYMIN, IDC_RESTMIN, IDC_FADEMIN, IDC_PLAY, IDC_HIDE, IDC_EXIT, IDC_STATUS,
     IDC_MASTER_SLIDER, IDC_LBL_MASTER,
     IDC_LBL_FREQ, IDC_LBL_MID, IDC_LBL_VOL, IDC_LBL_BAL,
     IDC_STATUS_TIME,
@@ -55,21 +55,24 @@ static const int kCtrlX = 44;      // sliders
 static const int kCtrlW = 314;     // sliders stop at 358, inside the box border
 static const int kRightX = 378;    // right edge of content
 static const int kWinW = 402;
-static const int kWinH = 656;
+static const int kWinH = 668;
 
 // Group boxes span the full content width; what they hold is inset from both
 // sides by the same amount, which is why the sliders stop short of kRightX.
 static const int kBoxX = kGutterX;
 static const int kBoxW = kRightX - kBoxX;
-static const int kBoxATop = 183, kBoxABottom = 434;
-static const int kBoxBTop = 452, kBoxBBottom = 562;
+static const int kBoxATop = 183, kBoxABottom = 446;
+static const int kBoxBTop = 464, kBoxBBottom = 574;
 static const int kCaptionX = 40;
 
 // Play and rest durations in minutes. 0 means "continuous" and "none".
 static const int  kPlayMin[] = { 0, 5, 10, 15, 20, 30, 45, 60, 90 };
 static const int  kRestMin[] = { 0, 1, 2, 3, 5, 10, 15, 20, 30 };
+// Length of the ramp down to silence at the end of the play phase. 0 is off.
+static const int  kFadeMin[] = { 0, 5, 10, 20, 30 };
 static const int  kPlayCount = 9;
 static const int  kRestCount = 9;
+static const int  kFadeCount = 5;
 static const UINT_PTR kTickTimer = 1;
 
 enum { PHASE_PLAY = 0, PHASE_REST = 1 };
@@ -121,8 +124,11 @@ static HWND hPresetCombo, hPresetSave, hPresetDel;
 static HWND hLayerEn[kMaxLayers], hLayerSel[kMaxLayers];
 static HWND hMode, hFreqSlider, hFreqEdit, hBwSlider, hBeatSlider, hChkBeat;
 static HWND hVolSlider, hBalSlider;
-static HWND hPlayMin, hRestMin, hMaster, hLblMaster;
-static HWND hPlay, hHide, hStatus, hStatusTime, hLblFreq, hLblMid, hLblVol, hLblBal;
+static HWND hPlayMin, hRestMin, hFadeMin, hMaster, hLblMaster;
+// 1.0 is the master volume as set; the fade walks it down to 0 without moving
+// the slider, so the next session starts back at the level the user chose.
+static double g_fadeScale = 1.0;
+static HWND hPlay, hHide, hExit, hStatus, hStatusTime, hLblFreq, hLblMid, hLblVol, hLblBal;
 static HWND hLblBoxA, hLblBoxB;
 
 // Defined with the other frame drawing, but needed by the label updates above it.
@@ -219,6 +225,47 @@ static void MakeFont()
     }
     if (!g_font) g_font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     if (!g_fontBold) g_fontBold = g_font;
+}
+
+// ---------------------------------------------------------------- drawing colours
+
+// Darkens the window background by a percentage, so every drawn line tracks the
+// theme instead of being a fixed grey.
+static COLORREF ShadeFace(int pct)
+{
+    const COLORREF f = GetSysColor(COLOR_BTNFACE);
+    return RGB(GetRValue(f) * pct / 100, GetGValue(f) * pct / 100, GetBValue(f) * pct / 100);
+}
+
+static COLORREF RuleColor()   { return ShadeFace(88); }
+static COLORREF FieldBorder() { return ShadeFace(62); }
+
+// One colour per layer, carried by that layer's checkbox, its row marker and,
+// while it is the layer being edited, the sliders below.
+static COLORREF LayerColor(int i)
+{
+    // Hues about 230, 185 and 78 degrees. The first was moved towards violet and
+    // the last towards yellow, because blue and teal sat too close to tell apart
+    // at checkbox size.
+    static const COLORREF kAccent[] = {
+        RGB(0x3A, 0x55, 0xD6),   // blue
+        RGB(0x0F, 0xA8, 0xB4),   // teal
+        RGB(0x74, 0xA0, 0x14),   // yellow-green
+    };
+    return kAccent[(i < 0 || i >= kMaxLayers) ? 0 : i];
+}
+
+static void FillRound(HDC dc, const RECT& r, int radius, COLORREF fill, COLORREF border)
+{
+    HBRUSH br = CreateSolidBrush(fill);
+    HPEN pen = CreatePen(PS_SOLID, 1, border);
+    HGDIOBJ ob = SelectObject(dc, br);
+    HGDIOBJ op = SelectObject(dc, pen);
+    RoundRect(dc, r.left, r.top, r.right, r.bottom, radius, radius);
+    SelectObject(dc, ob);
+    SelectObject(dc, op);
+    DeleteObject(br);
+    DeleteObject(pen);
 }
 
 // ---------------------------------------------------------------- settings file
@@ -447,10 +494,120 @@ static void DrawRowCell(HDC dc, const RECT& row, const RowCol& c, LPCWSTR text)
     DrawTextW(dc, text, -1, &r, c.align | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 }
 
+// The checkbox is drawn here rather than by the theme, because the theme has no
+// way to say "this one is the teal layer".
+static void DrawLayerCheck(int i, const NMCUSTOMDRAW* cd)
+{
+    FillRect(cd->hdc, &cd->rc, GetSysColorBrush(COLOR_BTNFACE));
+
+    const int side = S(16);
+    RECT r;
+    r.left = cd->rc.left + S(2);
+    r.top = cd->rc.top + ((cd->rc.bottom - cd->rc.top) - side) / 2;
+    r.right = r.left + side;
+    r.bottom = r.top + side;
+
+    const COLORREF accent = LayerColor(i);
+    // Button custom draw does not report the check state in uItemState, so ask
+    // the control. Reading it from the flags leaves the box always empty.
+    const bool checked =
+        (SendMessageW(cd->hdr.hwndFrom, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    const bool hot = (cd->uItemState & CDIS_HOT) != 0;
+
+    if (!checked) {
+        FillRound(cd->hdc, r, S(4), GetSysColor(COLOR_WINDOW), hot ? accent : FieldBorder());
+        return;
+    }
+
+    FillRound(cd->hdc, r, S(4), accent, accent);
+    HPEN pen = CreatePen(PS_SOLID, S(2), RGB(255, 255, 255));
+    HGDIOBJ op = SelectObject(cd->hdc, pen);
+    const POINT tick[3] = {
+        { r.left + side * 24 / 100, r.top + side * 52 / 100 },
+        { r.left + side * 42 / 100, r.top + side * 72 / 100 },
+        { r.left + side * 78 / 100, r.top + side * 30 / 100 },
+    };
+    Polyline(cd->hdc, tick, 3);
+    SelectObject(cd->hdc, op);
+    DeleteObject(pen);
+}
+
+// Trackbars hand over one item at a time; only the thumb is taken, so the
+// channel and the background stay native.
+static COLORREF Blend(COLORREF a, COLORREF b, int pctA)
+{
+    const int q = 100 - pctA;
+    return RGB((GetRValue(a) * pctA + GetRValue(b) * q) / 100,
+               (GetGValue(a) * pctA + GetGValue(b) * q) / 100,
+               (GetBValue(a) * pctA + GetBValue(b) * q) / 100);
+}
+
+static void FillPoly(HDC dc, const POINT* pts, int n, COLORREF c)
+{
+    HBRUSH br = CreateSolidBrush(c);
+    HPEN pen = CreatePen(PS_SOLID, 1, c);
+    HGDIOBJ ob = SelectObject(dc, br);
+    HGDIOBJ op = SelectObject(dc, pen);
+    Polygon(dc, pts, n);
+    SelectObject(dc, ob);
+    SelectObject(dc, op);
+    DeleteObject(br);
+    DeleteObject(pen);
+}
+
+static void DrawSliderThumb(const NMCUSTOMDRAW* cd, COLORREF accent)
+{
+    // Trackbar custom draw does not report the disabled state, so ask the
+    // control. Reading it from the flags leaves a disabled slider looking live.
+    const bool disabled = !IsWindowEnabled(cd->hdr.hwndFrom);
+    const COLORREF c = disabled ? ShadeFace(72) : accent;
+
+    RECT r = cd->rc;
+    const int w = S(11);
+    const int cx = (r.left + r.right) / 2;
+    r.left = cx - w / 2;
+    r.right = r.left + w;
+
+    // The classic trackbar pointer: square shoulders, a short point at the
+    // bottom. GDI has no anti-aliasing, so the shape is laid down twice: once a
+    // pixel larger in a half-tone, then at size. The outer pass fills the steps
+    // along the diagonals with a mid colour and the edge stops looking sawn.
+    // Everything stays inside the rect the control gave us. A pixel outside it
+    // is never erased when the thumb moves on, and leaves a trail down the bar.
+    const int shoulder = r.top + (r.bottom - r.top) * 74 / 100;
+    const POINT halo[5] = {
+        { r.left,      r.top },
+        { r.right - 1, r.top },
+        { r.right - 1, shoulder },
+        { cx,          r.bottom - 1 },
+        { r.left,      shoulder },
+    };
+    const POINT body[5] = {
+        { r.left + 1,  r.top + 1 },
+        { r.right - 2, r.top + 1 },
+        { r.right - 2, shoulder },
+        { cx,          r.bottom - 3 },
+        { r.left + 1,  shoulder },
+    };
+
+    FillPoly(cd->hdc, halo, ARRAYSIZE(halo), Blend(c, GetSysColor(COLOR_BTNFACE), 55));
+    FillPoly(cd->hdc, body, ARRAYSIZE(body), c);
+}
+
 static void DrawLayerRow(int i, const NMCUSTOMDRAW* cd)
 {
     const LayerCfg& L = g_layer[i];
     const int saved = SaveDC(cd->hdc);
+
+    // A slim bar in the layer colour, so the row and its checkbox agree.
+    RECT bar = cd->rc;
+    bar.left += S(4);
+    bar.right = bar.left + S(5);
+    bar.top += S(4);
+    bar.bottom -= S(4);
+    const COLORREF accent = LayerColor(i);
+    FillRound(cd->hdc, bar, S(2), accent, accent);
+
     SelectObject(cd->hdc, g_font);
     SetBkMode(cd->hdc, TRANSPARENT);
     SetTextColor(cd->hdc, GetSysColor(COLOR_BTNTEXT));
@@ -474,6 +631,23 @@ static void DrawLayerRow(int i, const NMCUSTOMDRAW* cd)
 
 static void UpdateAllLayerRows() { for (int i = 0; i < kMaxLayers; i++) UpdateLayerRow(i); }
 
+// A window property rather than GWLP_USERDATA: common controls are free to use
+// the user data slot themselves, and a colour that gets overwritten is worse
+// than no colour at all.
+static const WCHAR kAccentProp[] = L"DeskNoise.Accent";
+
+static void SetLayerSliderColor()
+{
+    const HANDLE c = (HANDLE)(UINT_PTR)LayerColor(g_sel);
+    const HWND sliders[] = { hFreqSlider, hBwSlider, hBeatSlider, hVolSlider, hBalSlider };
+    for (HWND s : sliders) SetPropW(s, kAccentProp, c);
+}
+
+static COLORREF LayerSliderColor(HWND s)
+{
+    return (COLORREF)(UINT_PTR)GetPropW(s, kAccentProp);
+}
+
 // ---------------------------------------------------------------- status text
 
 static int SelPlayMin()
@@ -489,14 +663,43 @@ static int SelRestMin()
     return (i > 0 && i < kRestCount) ? kRestMin[i] : 0;
 }
 
+// Fading has to reach real silence, and it moves in fractions of a percent, so
+// this takes the slider position through the volume curve as a real number
+// rather than reusing the integer VolToGain.
+static void PushMasterGain()
+{
+    const int pos = PctFromPos((int)SendMessageW(hMaster, TBM_GETPOS, 0, 0));
+    const double p = pos * g_fadeScale;
+    g_audio.params.masterVol.store(
+        p <= 0.0 ? 0.0f : (float)pow(10.0, (-50.0 + p * 0.5) / 20.0));
+}
+
+static int SelFadeMin()
+{
+    // A fade needs a fixed end to run up to, and a rest cycle would bring the
+    // volume back up right after, which defeats the point.
+    if (SelPlayMin() == 0 || SelRestMin() > 0) return 0;
+    const int i = (int)SendMessageW(hFadeMin, CB_GETCURSEL, 0, 0);
+    return (i > 0 && i < kFadeCount) ? kFadeMin[i] : 0;
+}
+
+static void UpdateTimerEnables()
+{
+    EnableWindow(hRestMin, SelPlayMin() != 0);
+    EnableWindow(hFadeMin, SelPlayMin() != 0 && SelRestMin() == 0);
+}
+
 // Master volume does not belong to a layer, and is deliberately not stored in presets.
 static void ApplyMaster()
 {
     const int pos = PctFromPos((int)SendMessageW(hMaster, TBM_GETPOS, 0, 0));
-    g_audio.params.masterVol.store(VolToGain(pos));
+    PushMasterGain();
     WCHAR buf[80];
-    if (pos <= 0) lstrcpynW(buf, T(S_MASTER_MUTE), ARRAYSIZE(buf));
-    else          swprintf_s(buf, T(S_FMT_MASTER), pos, VolToDb(pos));
+    // With a fade armed the dB figure stops describing what will be heard, so
+    // the note replaces it and stays up for as long as the option is set.
+    if (SelFadeMin() > 0) swprintf_s(buf, T(S_FMT_MASTER_FADE), pos);
+    else if (pos <= 0)    lstrcpynW(buf, T(S_MASTER_MUTE), ARRAYSIZE(buf));
+    else                  swprintf_s(buf, T(S_FMT_MASTER), pos, VolToDb(pos));
     SetWindowTextW(hLblMaster, buf);
 }
 
@@ -543,6 +746,23 @@ static int SecondsLeft()
     return (g_phaseEnd > now) ? (int)((g_phaseEnd - now) / 1000) : 0;
 }
 
+// Walks the master gain down over the last stretch of the play phase. Runs off
+// the same half-second tick as the status line, which is finer than the ear can
+// follow, so the drop sounds continuous rather than stepped.
+static void UpdateFade()
+{
+    double scale = 1.0;
+    const int fadeSec = SelFadeMin() * 60;
+    if (g_session && g_phase == PHASE_PLAY && fadeSec > 0) {
+        const int left = SecondsLeft();
+        if (left >= 0 && left < fadeSec) scale = (double)left / (double)fadeSec;
+    }
+    if (scale != g_fadeScale) {
+        g_fadeScale = scale;
+        PushMasterGain();
+    }
+}
+
 static void UpdateStatus()
 {
     WCHAR buf[320] = {};
@@ -552,8 +772,9 @@ static void UpdateStatus()
     const int left = SecondsLeft();
 
     // Every path that changes layers, phase or session ends up here, so this is
-    // where the play clock catches up with what is actually audible.
+    // where the play clock and the fade catch up with the current state.
     SyncPlayClock();
+    UpdateFade();
 
     if (!g_session) {
         lstrcpynW(buf, T(S_STOPPED), 320);
@@ -590,6 +811,12 @@ static void UpdateStatus()
     SetWindowTextW(hStatusTime, seg);
 
     SetWindowTextW(hPlay, T(g_session ? S_STOP : S_PLAY));
+    // Focus moving to another button hands the default look over to it, and the
+    // play button loses the accent border that marks it as the main action.
+    // Claim it back, but only when it is actually gone, or the button would
+    // repaint on every tick.
+    if ((GetWindowLongW(hPlay, GWL_STYLE) & BS_TYPEMASK) != BS_DEFPUSHBUTTON)
+        SendMessageW(hPlay, BM_SETSTYLE, BS_DEFPUSHBUTTON, TRUE);
 
     WCHAR tip[128];
     wsprintfW(tip, L"%s · %s", APP_TITLE,
@@ -628,6 +855,11 @@ static void UpdateMidRow()
 
 static void UpdateLabels()
 {
+    // First thing, before any call below can make a slider repaint: hand each
+    // one the colour of the layer now being edited. A slider that painted before
+    // this ran would show the layer selected a moment ago.
+    SetLayerSliderColor();
+
     WCHAR buf[96];
     const LayerCfg& L = g_layer[g_sel];
 
@@ -651,6 +883,13 @@ static void UpdateLabels()
     EnableWindow(hFreqSlider, fUsable);
     EnableWindow(hFreqEdit, fUsable);
     EnableWindow(hLblFreq, fUsable);
+
+    // The colour was written at the top of this function, before anything that
+    // could trigger a repaint. This only forces the sliders that did not move to
+    // redraw, since a trackbar repaints on its own only when its value changes.
+    const HWND sliders[] = { hFreqSlider, hBwSlider, hBeatSlider, hVolSlider, hBalSlider };
+    for (HWND s : sliders)
+        RedrawWindow(s, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
 }
 
 static void SyncFreqEdit()
@@ -959,6 +1198,42 @@ static HWND MkStatic(HWND p, int id, LPCWSTR text, int x, int y, int w, int h)
     return c;
 }
 
+// A trackbar pages towards a click on the bar and leaves the thumb where it was.
+// If the pointer happened to land near the thumb it looks as though the thumb
+// was grabbed and then slipped. This takes the click to mean "put the thumb
+// here and start dragging".
+static LRESULT CALLBACK SliderProc(HWND h, UINT m, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR)
+{
+    // Never let a trackbar turn its focus rectangle on. It is drawn by inverting
+    // pixels, and the custom thumb repaints often enough that the outline ends
+    // up doubled or half erased. Tab still lands here, it just does not outline.
+    if (m == WM_UPDATEUISTATE) wp = MAKEWPARAM(UIS_SET, UISF_HIDEFOCUS);
+
+    if (m == WM_LBUTTONDOWN) {
+        RECT ch = {};
+        SendMessageW(h, TBM_GETCHANNELRECT, 0, (LPARAM)&ch);
+        const int thumb = (int)SendMessageW(h, TBM_GETTHUMBLENGTH, 0, 0);
+        const int lo = (int)SendMessageW(h, TBM_GETRANGEMIN, 0, 0);
+        const int hi = (int)SendMessageW(h, TBM_GETRANGEMAX, 0, 0);
+        const int span = (ch.right - ch.left) - thumb;
+        if (span > 0 && hi > lo) {
+            int x = (int)(short)LOWORD(lp) - ch.left - thumb / 2;
+            if (x < 0) x = 0;
+            if (x > span) x = span;
+            const int value = lo + (int)(((LONGLONG)(hi - lo) * x + span / 2) / span);
+            SendMessageW(h, TBM_SETPOS, TRUE, value);
+            SendMessageW(GetParent(h), WM_HSCROLL,
+                MAKEWPARAM(TB_THUMBPOSITION, value), (LPARAM)h);
+            // Re-aim the click at the thumb's new home so the control starts a
+            // drag rather than another page step.
+            RECT tr = {};
+            SendMessageW(h, TBM_GETTHUMBRECT, 0, (LPARAM)&tr);
+            lp = MAKELPARAM((tr.left + tr.right) / 2, (tr.top + tr.bottom) / 2);
+        }
+    }
+    return DefSubclassProc(h, m, wp, lp);
+}
+
 static HWND MkSlider(HWND p, int id, int x, int y, int w, int h, int lo, int hi, int page)
 {
     HWND c = CreateWindowExW(0, TRACKBAR_CLASSW, L"",
@@ -970,6 +1245,7 @@ static HWND MkSlider(HWND p, int id, int x, int y, int w, int h, int lo, int hi,
     // own resolution, so scale the line size with the range.
     const int line = (hi - lo) / 100;
     SendMessageW(c, TBM_SETLINESIZE, 0, line > 1 ? line : 1);
+    SetWindowSubclass(c, SliderProc, 1, 0);
     return c;
 }
 
@@ -991,7 +1267,7 @@ static int  g_ruleCount = 0;
 
 // Group boxes are drawn the same way, so their weight matches the rules.
 struct Box { int x, y, w, h; };
-static Box g_boxes[4];
+static Box g_boxes[6];
 static int g_boxCount = 0;
 
 static void MkRule(HWND, int x, int y, int w)
@@ -1004,11 +1280,6 @@ static void MkBox(int x, int y, int w, int h)
     if (g_boxCount < ARRAYSIZE(g_boxes)) g_boxes[g_boxCount++] = { x, y, w, h };
 }
 
-static COLORREF RuleColor()
-{
-    const COLORREF f = GetSysColor(COLOR_BTNFACE);
-    return RGB(GetRValue(f) * 88 / 100, GetGValue(f) * 88 / 100, GetBValue(f) * 88 / 100);
-}
 
 // Status bar text sits back from the controls above it. Mixing towards the
 // background rather than using COLOR_GRAYTEXT keeps it from reading as disabled.
@@ -1035,7 +1306,9 @@ static void PaintFrames(HDC dc)
     }
     for (int i = 0; i < g_boxCount; i++) {
         const Box& b = g_boxes[i];
-        RoundRect(dc, S(b.x), S(b.y), S(b.x + b.w), S(b.y + b.h), S(8), S(8));
+        // A field-sized box wants a tighter corner than a section-sized one.
+        const int r = S(b.h < 60 ? 4 : 8);
+        RoundRect(dc, S(b.x), S(b.y), S(b.x + b.w), S(b.y + b.h), r, r);
     }
 
     SelectObject(dc, oldBrush);
@@ -1055,6 +1328,17 @@ static int TextWidth(HWND p, LPCWSTR text, HFONT font)
     SelectObject(dc, old);
     ReleaseDC(p, dc);
     return MulDiv(sz.cx, 96, g_dpi);
+}
+
+static int TextHeight(HWND p)
+{
+    HDC dc = GetDC(p);
+    HGDIOBJ old = SelectObject(dc, g_font);
+    TEXTMETRICW tm = {};
+    GetTextMetricsW(dc, &tm);
+    SelectObject(dc, old);
+    ReleaseDC(p, dc);
+    return MulDiv(tm.tmHeight, 96, g_dpi);
 }
 
 // A box caption sits on the border and is sized to its own text, so it punches
@@ -1171,8 +1455,8 @@ static void CreateControls(HWND p)
     MkBox(kBoxX, kBoxBTop, kBoxW, kBoxBBottom - kBoxBTop);
 
     // editor for the selected layer
-    MkStatic(p, 0, T(S_SOURCE), kTextX, 198, 70, 20);
-    hMode = MkCombo(p, IDC_MODE, 120, 194, kCtrlX + kCtrlW - 120, 240);
+    MkStatic(p, 0, T(S_SOURCE), kTextX, 206, 70, 20);
+    hMode = MkCombo(p, IDC_MODE, 120, 202, kCtrlX + kCtrlW - 120, 240);
     SetWindowLongPtrW(hMode, GWL_STYLE, GetWindowLongPtrW(hMode, GWL_STYLE) | WS_GROUP);
     for (int i = 0; i < 5; i++) SendMessageW(hMode, CB_ADDSTRING, 0, (LPARAM)ModeName(i));
 
@@ -1181,38 +1465,71 @@ static void CreateControls(HWND p)
     // their value next to the title text.
     const int freqLblW = TextWidth(p, T(S_FREQ), g_font);
     const int freqEditX = kTextX + freqLblW + 8;
-    hLblFreq = MkStatic(p, IDC_LBL_FREQ, T(S_FREQ), kTextX, 226, freqLblW, 18);
-    hFreqEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+    hLblFreq = MkStatic(p, IDC_LBL_FREQ, T(S_FREQ), kTextX, 238, freqLblW, 18);
+    // Drawn frame instead of WS_EX_CLIENTEDGE: the sunken 3D edge reads as a
+    // hole next to the flat combo boxes.
+    // A single-line edit draws its text at the top and leaves any spare height
+    // below it, so the field is cut to the height of one line. The frame then
+    // sits on the pixel next to the edit; any gap would show window grey
+    // between the white field and its border.
+    const int freqH = TextHeight(p) + 4;
+    hFreqEdit = CreateWindowExW(0, L"EDIT", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER | ES_RIGHT,
-        S(freqEditX), S(222), S(58), S(24), p, (HMENU)IDC_FREQ_EDIT, g_inst, nullptr);
+        S(freqEditX), S(236), S(58), S(freqH), p, (HMENU)IDC_FREQ_EDIT, g_inst, nullptr);
     SendMessageW(hFreqEdit, WM_SETFONT, (WPARAM)g_font, TRUE);
-    MkStatic(p, 0, L"Hz", freqEditX + 58 + 6, 226, 24, 18);
-    hFreqSlider = MkSlider(p, IDC_FREQ_SLIDER, kCtrlX, 246, kCtrlW, 26, 0, 1000, 20);
+    SendMessageW(hFreqEdit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
+        MAKELPARAM(S(4), S(4)));
+    MkBox(freqEditX - 1, 235, 60, freqH + 2);
+    MkStatic(p, 0, L"Hz", freqEditX + 58 + 6, 238, 24, 18);
+    hFreqSlider = MkSlider(p, IDC_FREQ_SLIDER, kCtrlX, 258, kCtrlW, 26, 0, 1000, 20);
 
     // Bandwidth and wobble share the same row: one static, one checkbox, and
     // whichever is showing owns the title text.
-    hLblMid = MkStatic(p, IDC_LBL_MID, T(S_BANDWIDTH), kTextX, 276, 300, 18);
+    hLblMid = MkStatic(p, IDC_LBL_MID, T(S_BANDWIDTH), kTextX, 288, 300, 18);
     // Aligned to the title column, not to the layer checkboxes above: this row
     // is a section title that happens to carry a checkbox.
-    hChkBeat = MkButton(p, IDC_CHK_BEAT, T(S_BEAT), kTextX, 272, kRightX - kTextX, 22, BS_AUTOCHECKBOX);
-    hBwSlider = MkSlider(p, IDC_BW_SLIDER, kCtrlX, 296, kCtrlW, 26, 0, 1000, 20);
-    hBeatSlider = MkSlider(p, IDC_BEAT_SLIDER, kCtrlX, 296, kCtrlW, 26,
+    hChkBeat = MkButton(p, IDC_CHK_BEAT, T(S_BEAT), kTextX, 284, kRightX - kTextX, 22, BS_AUTOCHECKBOX);
+    hBwSlider = MkSlider(p, IDC_BW_SLIDER, kCtrlX, 308, kCtrlW, 26, 0, 1000, 20);
+    hBeatSlider = MkSlider(p, IDC_BEAT_SLIDER, kCtrlX, 308, kCtrlW, 26,
         BeatToPos(kBeatMin), BeatToPos(kBeatMax), 5);
 
-    hLblVol = MkStatic(p, IDC_LBL_VOL, T(S_VOLUME), kTextX, 326, 300, 18);
-    hVolSlider = MkSlider(p, IDC_VOL_SLIDER, kCtrlX, 346, kCtrlW, 26, 0, kPctSteps, 50);
+    hLblVol = MkStatic(p, IDC_LBL_VOL, T(S_VOLUME), kTextX, 338, 300, 18);
+    hVolSlider = MkSlider(p, IDC_VOL_SLIDER, kCtrlX, 358, kCtrlW, 26, 0, kPctSteps, 50);
 
-    hLblBal = MkStatic(p, IDC_LBL_BAL, T(S_BALANCE), kTextX, 376, 300, 18);
-    hBalSlider = MkSlider(p, IDC_BAL_SLIDER, kCtrlX, 396, kCtrlW, 26, 0, kPctSteps, 50);
+    hLblBal = MkStatic(p, IDC_LBL_BAL, T(S_BALANCE), kTextX, 388, 300, 18);
+    hBalSlider = MkSlider(p, IDC_BAL_SLIDER, kCtrlX, 408, kCtrlW, 26, 0, kPctSteps, 50);
+
+    // Give the layer sliders a colour before their first paint; UpdateLabels
+    // keeps them in step from then on.
+    SetLayerSliderColor();
 
     // Everything below here is global rather than per-layer.
-    hLblMaster = MkStatic(p, IDC_LBL_MASTER, T(S_MASTER), kTextX, 466, 300, 18);
-    hMaster = MkSlider(p, IDC_MASTER_SLIDER, kCtrlX, 486, kCtrlW, 26, 0, kPctSteps, 50);
+    hLblMaster = MkStatic(p, IDC_LBL_MASTER, T(S_MASTER), kTextX, 478, 300, 18);
+    hMaster = MkSlider(p, IDC_MASTER_SLIDER, kCtrlX, 498, kCtrlW, 26, 0, kPctSteps, 50);
 
-    MkStatic(p, 0, T(S_PLAY), kTextX, 528, 36, 20);
-    hPlayMin = MkCombo(p, IDC_PLAYMIN, 88, 524, 100, 260);
-    MkStatic(p, 0, T(S_REST), 204, 528, 36, 20);
-    hRestMin = MkCombo(p, IDC_RESTMIN, 244, 524, 100, 260);
+    // Three label-and-combo pairs share one row. The labels are measured and the
+    // leftover width is split between the combos, so a longer translation makes
+    // the combos narrower instead of pushing the row off the box.
+    const int kLblGap = 5, kPairGap = 8;
+    const int rowRight = kCtrlX + kCtrlW;
+    const int wPlay = TextWidth(p, T(S_PLAY), g_font);
+    const int wRest = TextWidth(p, T(S_REST), g_font);
+    const int wFade = TextWidth(p, T(S_FADE), g_font);
+    int comboW = (rowRight - kTextX - (wPlay + wRest + wFade)
+                  - kLblGap * 3 - kPairGap * 2) / 3;
+    if (comboW < 54) comboW = 54;
+
+    int x = kTextX;
+    MkStatic(p, 0, T(S_PLAY), x, 540, wPlay, 20);
+    hPlayMin = MkCombo(p, IDC_PLAYMIN, x + wPlay + kLblGap, 536, comboW, 260);
+    x += wPlay + kLblGap + comboW + kPairGap;
+
+    MkStatic(p, 0, T(S_REST), x, 540, wRest, 20);
+    hRestMin = MkCombo(p, IDC_RESTMIN, x + wRest + kLblGap, 536, comboW, 260);
+    x += wRest + kLblGap + comboW + kPairGap;
+
+    MkStatic(p, 0, T(S_FADE), x, 540, wFade, 20);
+    hFadeMin = MkCombo(p, IDC_FADEMIN, x + wFade + kLblGap, 536, comboW, 260);
     // Slot 0 is the open-ended entry; the rest are built from the minute values.
     WCHAR item[32];
     for (int i = 0; i < kPlayCount; i++) {
@@ -1226,14 +1543,23 @@ static void CreateControls(HWND p)
         SendMessageW(hRestMin, CB_ADDSTRING, 0, (LPARAM)item);
     }
 
-    hPlay = MkButton(p, IDC_PLAY, T(S_PLAY), kGutterX, 574, 172, 38, BS_DEFPUSHBUTTON);
-    hHide = MkButton(p, IDC_HIDE, T(S_HIDE_TRAY), 206, 574, 172, 38, 0);
+    for (int i = 0; i < kFadeCount; i++) {
+        if (i == 0) lstrcpynW(item, T(S_NONE), ARRAYSIZE(item));
+        else        swprintf_s(item, T(S_FMT_MINUTES), kFadeMin[i]);
+        SendMessageW(hFadeMin, CB_ADDSTRING, 0, (LPARAM)item);
+    }
+
+    // Play takes the width it deserves; exit is the narrowest so a stray click
+    // is least likely to land on it.
+    hPlay = MkButton(p, IDC_PLAY, T(S_PLAY), kGutterX, 586, 160, 38, BS_DEFPUSHBUTTON);
+    hHide = MkButton(p, IDC_HIDE, T(S_HIDE_TRAY), 194, 586, 110, 38, 0);
+    hExit = MkButton(p, IDC_EXIT, T(S_TRAY_EXIT), 314, 586, 64, 38, 0);
 
     // Status bar. Its rule spans the whole window, unlike the boxes above.
     // Playing time on the left, message and countdown right-aligned.
-    MkRule(p, 0, 624, kWinW);
-    hStatusTime = MkStatic(p, IDC_STATUS_TIME, L"", kGutterX, 632, 120, 18);
-    hStatus = MkStatic(p, IDC_STATUS, T(S_STOPPED), 148, 632, kRightX - 148, 18);
+    MkRule(p, 0, 636, kWinW);
+    hStatusTime = MkStatic(p, IDC_STATUS_TIME, L"", kGutterX, 644, 120, 18);
+    hStatus = MkStatic(p, IDC_STATUS, T(S_STOPPED), 148, 644, kRightX - 148, 18);
     SetWindowLongPtrW(hStatus, GWL_STYLE,
         GetWindowLongPtrW(hStatus, GWL_STYLE) | SS_RIGHT | SS_ENDELLIPSIS);
 
@@ -1258,11 +1584,14 @@ static void LoadSettings()
     int ri = IniGetInt(L"main", L"restmin", 0);
     if (ri < 0 || ri >= kRestCount) ri = 0;
     SendMessageW(hRestMin, CB_SETCURSEL, ri, 0);
+    int fi = IniGetInt(L"main", L"fademin", 0);
+    if (fi < 0 || fi >= kFadeCount) fi = 0;
+    SendMessageW(hFadeMin, CB_SETCURSEL, fi, 0);
     SendMessageW(hMaster, TBM_SETPOS, TRUE,
         PctToPos((int)Clamp(IniGetInt(L"main", L"master", 100), 0, 100)));
     g_updating = false;
 
-    EnableWindow(hRestMin, SelPlayMin() != 0);
+    UpdateTimerEnables();
     ApplyMaster();
 
     g_sel = IniGetInt(L"main", L"sel", 0);
@@ -1278,6 +1607,7 @@ static void SaveSettings()
     LayersToIni(L"cur", g_layer);
     IniSetInt(L"main", L"playmin", (int)SendMessageW(hPlayMin, CB_GETCURSEL, 0, 0));
     IniSetInt(L"main", L"restmin", (int)SendMessageW(hRestMin, CB_GETCURSEL, 0, 0));
+    IniSetInt(L"main", L"fademin", (int)SendMessageW(hFadeMin, CB_GETCURSEL, 0, 0));
     IniSetInt(L"main", L"master", PctFromPos((int)SendMessageW(hMaster, TBM_GETPOS, 0, 0)));
     IniSetInt(L"main", L"sel", g_sel);
 }
@@ -1474,8 +1804,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             CommitLayerEdit();
             return 0;
         }
-        if ((id == IDC_PLAYMIN || id == IDC_RESTMIN) && code == CBN_SELCHANGE) {
-            EnableWindow(hRestMin, SelPlayMin() != 0);
+        if ((id == IDC_PLAYMIN || id == IDC_RESTMIN || id == IDC_FADEMIN)
+            && code == CBN_SELCHANGE) {
+            UpdateTimerEnables();
+            ApplyMaster();   // the master label carries the fade note
             // While a session runs, re-arm the remaining time with the new values.
             // Continuous playback has no rest phase, so fall back to the play phase.
             if (g_session) EnterPhase(SelPlayMin() == 0 ? PHASE_PLAY : g_phase);
@@ -1485,6 +1817,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (id == IDC_FREQ_EDIT && code == EN_KILLFOCUS) { ApplyFreqFromEdit(); return 0; }
         if (id == IDC_PLAY) { ToggleSession(); return 0; }
         if (id == IDC_HIDE) { HideMainWindow(); return 0; }
+        if (id == IDC_EXIT) { g_realExit = true; DestroyWindow(hwnd); return 0; }
         if (id == IDM_TRAY_TOGGLE) { ToggleSession(); return 0; }
         if (id == IDM_TRAY_SHOW) { ShowMainWindow(); return 0; }
         if (id == IDM_TRAY_ABOUT) {
@@ -1512,12 +1845,40 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // The layer rows keep the system's button background and selection, and
         // only their text is drawn here, in fixed columns.
         LPNMHDR nh = (LPNMHDR)lp;
-        if (nh->code == NM_CUSTOMDRAW &&
-            nh->idFrom >= IDC_LAYER_SEL && nh->idFrom < IDC_LAYER_SEL + kMaxLayers) {
-            NMCUSTOMDRAW* cd = (NMCUSTOMDRAW*)lp;
+        if (nh->code != NM_CUSTOMDRAW) break;
+        NMCUSTOMDRAW* cd = (NMCUSTOMDRAW*)lp;
+
+        if (nh->idFrom >= IDC_LAYER_SEL && nh->idFrom < IDC_LAYER_SEL + kMaxLayers) {
             if (cd->dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYPOSTPAINT;
             if (cd->dwDrawStage == CDDS_POSTPAINT) {
                 DrawLayerRow((int)(nh->idFrom - IDC_LAYER_SEL), cd);
+                return CDRF_DODEFAULT;
+            }
+            break;
+        }
+        if (nh->idFrom >= IDC_LAYER_EN && nh->idFrom < IDC_LAYER_EN + kMaxLayers) {
+            if (cd->dwDrawStage == CDDS_PREPAINT) {
+                DrawLayerCheck((int)(nh->idFrom - IDC_LAYER_EN), cd);
+                return CDRF_SKIPDEFAULT;
+            }
+            break;
+        }
+        // Sliders belonging to the selected layer take its colour; the master
+        // volume is not a layer, so it stays neutral.
+        {
+            const HWND s = nh->hwndFrom;
+            const bool layerSlider = (s == hFreqSlider || s == hBwSlider || s == hBeatSlider
+                                      || s == hVolSlider || s == hBalSlider);
+            if (layerSlider || s == hMaster) {
+                if (cd->dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;
+                if (cd->dwDrawStage == CDDS_ITEMPREPAINT && cd->dwItemSpec == TBCD_THUMB) {
+                    // A layer slider was told its colour when the layer was
+                    // selected. The master volume is not a layer, so it borrows
+                    // the system accent, the blue the title bar already uses.
+                    DrawSliderThumb(cd, layerSlider ? LayerSliderColor(s)
+                                                    : GetSysColor(COLOR_HIGHLIGHT));
+                    return CDRF_SKIPDEFAULT;
+                }
                 return CDRF_DODEFAULT;
             }
         }
@@ -1610,6 +1971,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 // Window-level shortcuts, taken before IsDialogMessage so they work wherever
 // focus happens to sit. The exceptions matter more than the keys themselves:
 // a control that already owns the key keeps it.
+// Windows hides focus rectangles while the mouse is in charge and shows them
+// once the keyboard is used. Play/stop and volume are not navigation, so they
+// should not turn the dotted outlines on; without this they appear and, because
+// they are drawn by inverting pixels, double up wherever something repaints.
+static void KeepFocusRectsHidden()
+{
+    SendMessageW(g_hwnd, WM_CHANGEUISTATE, MAKEWPARAM(UIS_SET, UISF_HIDEFOCUS), 0);
+}
+
 static bool HandleAppKey(const MSG& msg)
 {
     if (msg.message != WM_KEYDOWN) return false;
@@ -1625,6 +1995,7 @@ static bool HandleAppKey(const MSG& msg)
         for (int i = 0; i < kMaxLayers; i++) if (f == hLayerEn[i]) return false;
         if (onCombo && SendMessageW(f, CB_GETDROPPEDSTATE, 0, 0)) return false;
         ToggleSession();
+        KeepFocusRectsHidden();
         return true;
     }
 
@@ -1636,6 +2007,7 @@ static bool HandleAppKey(const MSG& msg)
         const int next = (int)Clamp(now + (up ? 5 : -5), 0, 100);
         SendMessageW(hMaster, TBM_SETPOS, TRUE, PctToPos(next));
         ApplyMaster();
+        KeepFocusRectsHidden();
         return true;
     }
     return false;
@@ -1690,6 +2062,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int)
     MakeFont();
     CreateControls(g_hwnd);
 
+    KeepFocusRectsHidden();
     g_audio.start();
     LoadSettings();
     TrayAdd();
