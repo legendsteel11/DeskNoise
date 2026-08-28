@@ -25,11 +25,11 @@
 
 // Single source of the app version. Used by app.rc (VERSIONINFO) and by
 // main.cpp (title bar). Keep the numeric and string forms in sync.
-#define APP_VER_MAJOR      0
-#define APP_VER_MINOR      1
+#define APP_VER_MAJOR      1
+#define APP_VER_MINOR      0
 #define APP_VER_PATCH      0
-#define APP_VERSION_STR    "0.1.0"
-#define APP_VERSION_STRW  L"0.1.0"
+#define APP_VERSION_STR    "1.0.0"
+#define APP_VERSION_STRW  L"1.0.0"
 
 // Filled in when a build is actually published; left empty until then.
 #define APP_RELEASE_DATE_W L""
