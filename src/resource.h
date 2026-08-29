@@ -32,7 +32,7 @@
 #define APP_VERSION_STRW  L"1.0.0"
 
 // Filled in when a build is actually published; left empty until then.
-#define APP_RELEASE_DATE_W L""
+#define APP_RELEASE_DATE_W L"2026-08-29"
 
 #define APP_AUTHOR_MAIL   L"pjh85336@gmail.com"
 #define APP_REPO_URL      L"https://github.com/legendsteel11/DeskNoise"
