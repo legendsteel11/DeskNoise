@@ -1743,13 +1743,18 @@ static INT_PTR CALLBACK AboutProc(HWND h, UINT m, WPARAM w, LPARAM lp)
         SetDlgItemTextW(h, IDC_AB_DATE_L, T(S_AB_DATE));
         SetDlgItemTextW(h, IDC_AB_DATE, APP_RELEASE_DATE_W);
 
-        WCHAR link[256];
+        WCHAR link[512];
         SetDlgItemTextW(h, IDC_AB_GITHUB_L, T(S_AB_GITHUB));
         swprintf_s(link, L"<a href=\"%s\">%s</a>", APP_REPO_URL, APP_REPO_TEXT);
         SetDlgItemTextW(h, IDC_AB_GITHUB, link);
 
+        // One control, three links. SysLink reports which one was hit through
+        // the url it carries, so the click handler below needs nothing added.
         SetDlgItemTextW(h, IDC_AB_TOOLS_L, T(S_AB_TOOLS));
-        swprintf_s(link, L"<a href=\"%s\">%s</a>", APP_DEV_URL, APP_DEV_TOOLS);
+        swprintf_s(link,
+            L"<a href=\"%s\">Edgetree</a> · <a href=\"%s\">TabStick</a>"
+            L" · <a href=\"%s\">SweepCap</a>",
+            APP_EDGETREE_URL, APP_TABSTICK_URL, APP_SWEEPCAP_URL);
         SetDlgItemTextW(h, IDC_AB_TOOLS, link);
 
         SetDlgItemTextW(h, IDC_AB_LIC_L, T(S_AB_LICENSE));

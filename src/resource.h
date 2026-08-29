@@ -37,5 +37,8 @@
 #define APP_AUTHOR_MAIL   L"pjh85336@gmail.com"
 #define APP_REPO_URL      L"https://github.com/legendsteel11/DeskNoise"
 #define APP_REPO_TEXT     L"github.com/legendsteel11/DeskNoise"
-#define APP_DEV_URL       L"https://github.com/legendsteel11"
-#define APP_DEV_TOOLS     L"Edgetree · TabStick · SweepCap"
+// The other tools, each pointing at where that one actually lives: its own
+// landing page where there is one, its repository otherwise.
+#define APP_EDGETREE_URL  L"https://edgetree.vercel.app/"
+#define APP_TABSTICK_URL  L"https://tabstick.com"
+#define APP_SWEEPCAP_URL  L"https://github.com/legendsteel11/SweepCap"
