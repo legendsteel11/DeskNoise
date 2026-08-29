@@ -428,6 +428,7 @@ void AudioEngine::fill(BYTE* dst, UINT32 frames)
     const UINT32 ch = dev_->channels;
     float* fdst = (float*)dst;
     short* sdst = (short*)dst;
+    bool spoiled = false;
 
     for (UINT32 i = 0; i < frames; i++) {
         masterGain_ += (masterTarget - masterGain_) * aGain_;
@@ -448,6 +449,16 @@ void AudioEngine::fill(BYTE* dst, UINT32 frames)
         const float mg = masterGain_ * curMaster_;
         sumL *= mg;
         sumR *= mg;
+
+        // Nothing upstream can produce one today, but a NaN would sail through
+        // every test below: comparing it against anything is false, so neither
+        // the limiter nor the clamp would catch it, and whatever the driver
+        // made of it would reach the speakers. Caught here instead, and the
+        // filter state is rebuilt after the block rather than staying poisoned.
+        if (!isfinite(sumL) || !isfinite(sumR)) {
+            sumL = sumR = 0.0f;
+            spoiled = true;
+        }
 
         // Output limiter. Stacked layers push the sum past 1.0 easily.
         const float aL = fabsf(sumL), aR = fabsf(sumR);
@@ -474,6 +485,12 @@ void AudioEngine::fill(BYTE* dst, UINT32 frames)
             for (UINT32 c = 2; c < ch; c++) p[c] = 0;
         }
     }
+
+    // A single bad sample means an oscillator or a filter is carrying one, and
+    // it would come back on every block from here on. Start them over; the
+    // reset also drops the master gain to zero, so the sound fades back in
+    // instead of returning as a step.
+    if (spoiled) resetDsp();
 
     // Tell the UI when the limiter is actually pulling gain down.
     limiting_.store(limGain_ < 0.97f);
