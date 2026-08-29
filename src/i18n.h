@@ -102,8 +102,8 @@
     X(S_AB_LICENSE_TEXT,    L"MIT 라이선스. 별도의 보증 없이 있는 그대로 제공되며, 사용에 따른 책임은 사용자 본인에게 있습니다.", \
                             L"MIT License. Provided as is, without warranty of any kind. You are responsible for how you use it.") \
     X(S_AB_NOTE,            L"안내",                                 L"Notice")                     \
-    X(S_AB_NOTE_TEXT,       L"이 프로그램은 의료기기가 아니며 질병의 진단이나 치료를 위한 것이 아닙니다. 소리는 편안하게 들리는 크기로 사용하십시오.", \
-                            L"DeskNoise is not a medical device and is not intended to diagnose or treat any condition. Keep the volume at a comfortable level.") \
+    X(S_AB_NOTE_TEXT,       L"DeskNoise는 의료기기가 아니며 질병의 진단이나 치료를 위한 것이 아닙니다. 음량은 편안하게 들리는 정도로 유지해 주세요. 큰 소리로 듣거나 헤드폰, 이어폰으로 오래 사용하면 청력에 부담이 될 수 있습니다.", \
+                            L"DeskNoise is not a medical device and is not intended to diagnose or treat any condition. Please keep the volume at a comfortable level. Listening at high volume for hours — especially through headphones or earbuds — can be hard on your hearing.") \
     X(S_AB_COPY_MAIL,       L"이메일 주소 복사",                     L"Copy email address")         \
     X(S_AB_COPIED,          L"복사했습니다",                         L"Copied")                     \
     X(S_CLOSE,              L"닫기",                                 L"Close")

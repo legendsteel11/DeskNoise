@@ -19,7 +19,7 @@ END
 
 // Every string here is replaced at runtime by the translated one, so the text
 // below only matters if the dialog somehow shows before I18nInit.
-IDD_ABOUT DIALOGEX 0, 0, 240, 280
+IDD_ABOUT DIALOGEX 0, 0, 240, 300
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "앱 정보"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -46,10 +46,10 @@ BEGIN
     LTEXT           "", IDC_AB_LIC, 12, 189, 216, 22
 
     LTEXT           "안내", IDC_AB_NOTE_L, 12, 216, 216, 9
-    LTEXT           "", IDC_AB_NOTE, 12, 227, 216, 30
+    LTEXT           "", IDC_AB_NOTE, 12, 227, 216, 48
 
-    PUSHBUTTON      "이메일 주소 복사", IDC_AB_COPY, 96, 260, 76, 14
-    DEFPUSHBUTTON   "닫기", IDOK, 178, 260, 50, 14
+    PUSHBUTTON      "이메일 주소 복사", IDC_AB_COPY, 96, 280, 76, 14
+    DEFPUSHBUTTON   "닫기", IDOK, 178, 280, 50, 14
 END
 
 VS_VERSION_INFO VERSIONINFO
