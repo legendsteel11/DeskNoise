@@ -480,8 +480,8 @@ static void UpdateLayerRow(int i)
 // frequency and volume each own a fixed cell so the values line up down the
 // list instead of drifting with the text in front of them.
 struct RowCol { int x, w; UINT align; };
-static const RowCol kRowNum   = {  12, 18, DT_RIGHT };
-static const RowCol kRowName  = {  38, 60, DT_LEFT };
+static const RowCol kRowNum   = {   4, 12, DT_RIGHT };
+static const RowCol kRowName  = {  24, 74, DT_LEFT };
 static const RowCol kRowFreq  = { 102, 72, DT_RIGHT };
 static const RowCol kRowVol   = { 180, 44, DT_RIGHT };
 static const RowCol kRowExtra = { 232, 92, DT_LEFT };
@@ -656,15 +656,6 @@ static void DrawLayerRow(int i, const NMCUSTOMDRAW* cd)
 {
     const LayerCfg& L = g_layer[i];
     const int saved = SaveDC(cd->hdc);
-
-    // A slim bar in the layer colour, so the row and its checkbox agree.
-    RECT bar = cd->rc;
-    bar.left += S(4);
-    bar.right = bar.left + S(5);
-    bar.top += S(4);
-    bar.bottom -= S(4);
-    const COLORREF accent = LayerColor(i);
-    FillRound(cd->hdc, bar, S(2), accent, accent);
 
     SelectObject(cd->hdc, g_font);
     SetBkMode(cd->hdc, TRANSPARENT);
