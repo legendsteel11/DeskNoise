@@ -18,3 +18,6 @@ releases/
 *.ai
 *.psd
 *.psb
+
+# Project instructions for Claude Code. Local context, not for the repo.
+CLAUDE.local.md
