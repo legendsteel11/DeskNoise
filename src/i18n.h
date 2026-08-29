@@ -54,7 +54,7 @@
     X(S_FMT_BAL_RIGHT,      L"밸런스 : 오른쪽 %d%%",                 L"Balance: right %d%%")        \
     /* presets */                                                                                  \
     X(S_PRESET,             L"프리셋",                               L"Preset")                     \
-    X(S_PRESET_CUSTOM,      L"(직접 설정)",                          L"(custom)")                   \
+    X(S_PRESET_CUSTOM,      L"-",                                    L"-")                          \
     X(S_PRESET_UNNAMED,     L"(이름 없음)",                          L"(unnamed)")                  \
     X(S_PRESET_FULL,        L"프리셋을 더 저장할 수 없습니다.",      L"No room for another preset.") \
     X(S_FMT_PRESET_REPLACE, L"\"%s\" 프리셋이 이미 있습니다. 덮어쓸까요?", \

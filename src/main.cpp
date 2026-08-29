@@ -1495,6 +1495,15 @@ static void CreateControls(HWND p)
     hPresetSave = MkButton(p, IDC_PRESET_SAVE, T(S_SAVE), 264, 12, 54, 24, 0);
     hPresetDel = MkButton(p, IDC_PRESET_DEL, T(S_DELETE), 324, 12, 54, 24, 0);
 
+    // The two buttons stand beside the preset combo, so they take their height
+    // from it rather than a fixed one. A flat button next to a taller box reads
+    // as squashed, and the combo grows with the font on its own.
+    const int presetH = ComboItemHeight() + S(6);
+    SetWindowPos(hPresetSave, nullptr, 0, 0, S(54), presetH,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(hPresetDel, nullptr, 0, 0, S(54), presetH,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
     MkRule(p, kGutterX, 48, kRightX - kGutterX);
 
     HWND lblLayers = MkStatic(p, 0, T(S_LAYERS_HINT), kGutterX, 60, kRightX - kGutterX, 18);
