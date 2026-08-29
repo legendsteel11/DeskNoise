@@ -555,14 +555,13 @@ static void FillPoly(HDC dc, const POINT* pts, int n, COLORREF c)
     DeleteObject(pen);
 }
 
-static void DrawSliderThumb(const NMCUSTOMDRAW* cd, COLORREF accent)
+static void DrawSliderThumb(HDC dc, HWND slider, RECT r, COLORREF accent)
 {
     // Trackbar custom draw does not report the disabled state, so ask the
     // control. Reading it from the flags leaves a disabled slider looking live.
-    const bool disabled = !IsWindowEnabled(cd->hdr.hwndFrom);
+    const bool disabled = !IsWindowEnabled(slider);
     const COLORREF c = disabled ? ShadeFace(72) : accent;
 
-    RECT r = cd->rc;
     const int w = S(11);
     const int cx = (r.left + r.right) / 2;
     r.left = cx - w / 2;
@@ -590,8 +589,67 @@ static void DrawSliderThumb(const NMCUSTOMDRAW* cd, COLORREF accent)
         { r.left + 1,  shoulder },
     };
 
-    FillPoly(cd->hdc, halo, ARRAYSIZE(halo), Blend(c, GetSysColor(COLOR_BTNFACE), 55));
-    FillPoly(cd->hdc, body, ARRAYSIZE(body), c);
+    FillPoly(dc, halo, ARRAYSIZE(halo), Blend(c, GetSysColor(COLOR_BTNFACE), 55));
+    FillPoly(dc, body, ARRAYSIZE(body), c);
+}
+
+// The whole control, not just the thumb. Intercepting TBCD_THUMB alone left the
+// colour a layer behind: the trackbar sends the item stages only for the parts
+// it decides need repainting, so a slider whose value did not change kept the
+// previous layer's thumb no matter how hard the window was invalidated. The
+// prepaint stage always arrives, so everything is drawn from here instead.
+static void PaintSlider(HDC dc, HWND h, const RECT& client, COLORREF accent)
+{
+    // Nothing erases behind us once the control's own drawing is skipped.
+    FillRect(dc, &client, GetSysColorBrush(COLOR_BTNFACE));
+
+    // The control knows where its parts sit; asking beats recomputing the
+    // layout and drifting from where the mouse thinks the thumb is.
+    RECT ch = {};
+    SendMessageW(h, TBM_GETCHANNELRECT, 0, (LPARAM)&ch);
+    const int mid = (ch.top + ch.bottom) / 2;
+    RECT bar = { ch.left, mid - S(2), ch.right, mid + S(2) };
+    FillRound(dc, bar, S(4), ShadeFace(93), ShadeFace(83));
+
+    RECT tr = {};
+    SendMessageW(h, TBM_GETTHUMBRECT, 0, (LPARAM)&tr);
+    DrawSliderThumb(dc, h, tr, accent);
+}
+
+static void DrawSliderAll(const NMCUSTOMDRAW* cd, COLORREF accent)
+{
+    const HWND h = cd->hdr.hwndFrom;
+
+    // Not cd->rc: at the prepaint stage the trackbar leaves it empty, and an
+    // empty rect here means an empty off screen bitmap and a slider that draws
+    // nothing at all. The control's own client rect is what we are covering.
+    RECT client = {};
+    GetClientRect(h, &client);
+    const int w = client.right - client.left;
+    const int ht = client.bottom - client.top;
+    if (w <= 0 || ht <= 0) return;
+
+    // Off screen first, then one blit. Background, channel and thumb laid
+    // straight onto the window would be three visible steps, and dragging a
+    // thumb repaints fast enough for that to read as flicker.
+    HDC mem = CreateCompatibleDC(cd->hdc);
+    HBITMAP bmp = mem ? CreateCompatibleBitmap(cd->hdc, w, ht) : nullptr;
+    if (!bmp) {
+        if (mem) DeleteDC(mem);
+        PaintSlider(cd->hdc, h, client, accent);
+        return;
+    }
+
+    HGDIOBJ old = SelectObject(mem, bmp);
+    SetViewportOrgEx(mem, -client.left, -client.top, nullptr);
+    PaintSlider(mem, h, client, accent);
+    SetViewportOrgEx(mem, 0, 0, nullptr);
+
+    BitBlt(cd->hdc, client.left, client.top, w, ht, mem, 0, 0, SRCCOPY);
+
+    SelectObject(mem, old);
+    DeleteObject(bmp);
+    DeleteDC(mem);
 }
 
 static void DrawLayerRow(int i, const NMCUSTOMDRAW* cd)
@@ -636,16 +694,25 @@ static void UpdateAllLayerRows() { for (int i = 0; i < kMaxLayers; i++) UpdateLa
 // than no colour at all.
 static const WCHAR kAccentProp[] = L"DeskNoise.Accent";
 
-static void SetLayerSliderColor()
-{
-    const HANDLE c = (HANDLE)(UINT_PTR)LayerColor(g_sel);
-    const HWND sliders[] = { hFreqSlider, hBwSlider, hBeatSlider, hVolSlider, hBalSlider };
-    for (HWND s : sliders) SetPropW(s, kAccentProp, c);
-}
-
 static COLORREF LayerSliderColor(HWND s)
 {
     return (COLORREF)(UINT_PTR)GetPropW(s, kAccentProp);
+}
+
+static void SetLayerSliderColor()
+{
+    // Only the sliders whose colour actually changes are invalidated. This runs
+    // on every label update, so repainting unconditionally made all five flash
+    // while one of them was being dragged.
+    const COLORREF c = LayerColor(g_sel);
+    const HWND sliders[] = { hFreqSlider, hBwSlider, hBeatSlider, hVolSlider, hBalSlider };
+    for (HWND s : sliders) {
+        if (LayerSliderColor(s) == c) continue;
+        SetPropW(s, kAccentProp, (HANDLE)(UINT_PTR)c);
+        // A trackbar repaints itself only when its value moves, so one that
+        // keeps its position still has to be told the colour is stale.
+        InvalidateRect(s, nullptr, FALSE);
+    }
 }
 
 // ---------------------------------------------------------------- status text
@@ -884,12 +951,6 @@ static void UpdateLabels()
     EnableWindow(hFreqEdit, fUsable);
     EnableWindow(hLblFreq, fUsable);
 
-    // The colour was written at the top of this function, before anything that
-    // could trigger a repaint. This only forces the sliders that did not move to
-    // redraw, since a trackbar repaints on its own only when its value changes.
-    const HWND sliders[] = { hFreqSlider, hBwSlider, hBeatSlider, hVolSlider, hBalSlider };
-    for (HWND s : sliders)
-        RedrawWindow(s, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
 }
 
 static void SyncFreqEdit()
@@ -945,6 +1006,10 @@ static void SelectLayer(int i)
 {
     if (i < 0 || i >= kMaxLayers) return;
     g_sel = i;
+    // Before the controls take their new values. Setting a trackbar's position
+    // repaints it on the spot, and that paint has to already know the colour;
+    // UpdateLabels at the end of the fill would have been a paint too late.
+    SetLayerSliderColor();
     WriteLayerToControls();
 }
 
@@ -1208,6 +1273,10 @@ static LRESULT CALLBACK SliderProc(HWND h, UINT m, WPARAM wp, LPARAM lp, UINT_PT
     // pixels, and the custom thumb repaints often enough that the outline ends
     // up doubled or half erased. Tab still lands here, it just does not outline.
     if (m == WM_UPDATEUISTATE) wp = MAKEWPARAM(UIS_SET, UISF_HIDEFOCUS);
+
+    // The custom draw lays the background down itself, so erasing first would
+    // only be a flash of grey ahead of every repaint.
+    if (m == WM_ERASEBKGND) return 1;
 
     if (m == WM_LBUTTONDOWN) {
         RECT ch = {};
@@ -1870,13 +1939,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             const bool layerSlider = (s == hFreqSlider || s == hBwSlider || s == hBeatSlider
                                       || s == hVolSlider || s == hBalSlider);
             if (layerSlider || s == hMaster) {
-                if (cd->dwDrawStage == CDDS_PREPAINT) return CDRF_NOTIFYITEMDRAW;
-                if (cd->dwDrawStage == CDDS_ITEMPREPAINT && cd->dwItemSpec == TBCD_THUMB) {
+                if (cd->dwDrawStage == CDDS_PREPAINT) {
                     // A layer slider was told its colour when the layer was
                     // selected. The master volume is not a layer, so it borrows
                     // the system accent, the blue the title bar already uses.
-                    DrawSliderThumb(cd, layerSlider ? LayerSliderColor(s)
-                                                    : GetSysColor(COLOR_HIGHLIGHT));
+                    DrawSliderAll(cd, layerSlider ? LayerSliderColor(s)
+                                                  : GetSysColor(COLOR_HIGHLIGHT));
                     return CDRF_SKIPDEFAULT;
                 }
                 return CDRF_DODEFAULT;
