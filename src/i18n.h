@@ -86,7 +86,7 @@
     X(S_NONE,               L"없음",                                 L"None")                       \
     X(S_FMT_MINUTES,        L"%d분",                                 L"%d min")                     \
     /* checkboxes and tray menu */                                                                 \
-    X(S_HIDE_TRAY,          L"트레이로",                             L"To tray")                    \
+    X(S_HIDE_TRAY,          L"트레이",                               L"Tray")                       \
     X(S_TRAY_SHOW,          L"창 열기",                              L"Open window")                \
     X(S_TRAY_RESTART,       L"다시 시작",                            L"Restart")                    \
     X(S_TRAY_EXIT,          L"종료",                                 L"Exit")                       \

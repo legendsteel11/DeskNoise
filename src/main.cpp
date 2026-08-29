@@ -1620,8 +1620,8 @@ static void CreateControls(HWND p)
 
     // Play takes the width it deserves; exit is the narrowest so a stray click
     // is least likely to land on it.
-    hPlay = MkButton(p, IDC_PLAY, T(S_PLAY), kGutterX, 586, 160, 38, BS_DEFPUSHBUTTON);
-    hHide = MkButton(p, IDC_HIDE, T(S_HIDE_TRAY), 194, 586, 110, 38, 0);
+    hPlay = MkButton(p, IDC_PLAY, T(S_PLAY), kGutterX, 586, 186, 38, BS_DEFPUSHBUTTON);
+    hHide = MkButton(p, IDC_HIDE, T(S_HIDE_TRAY), 220, 586, 84, 38, 0);
     hExit = MkButton(p, IDC_EXIT, T(S_TRAY_EXIT), 314, 586, 64, 38, 0);
 
     // Status bar. Its rule spans the whole window, unlike the boxes above.
