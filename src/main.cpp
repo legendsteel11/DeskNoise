@@ -40,6 +40,7 @@ enum {
     IDC_MASTER_SLIDER, IDC_LBL_MASTER,
     IDC_LBL_FREQ, IDC_LBL_MID, IDC_LBL_VOL, IDC_LBL_BAL,
     IDC_STATUS_TIME,
+    IDC_MODE_RESET,
     IDC_LAYER_EN = 1100,    // +0..kMaxLayers
     IDC_LAYER_SEL = 1110,   // +0..kMaxLayers
     IDM_TRAY_TOGGLE = 2001, IDM_TRAY_SHOW, IDM_TRAY_EXIT,
@@ -122,7 +123,7 @@ static WCHAR       g_nameBuf[64] = {};
 
 static HWND hPresetCombo, hPresetSave, hPresetDel;
 static HWND hLayerEn[kMaxLayers], hLayerSel[kMaxLayers];
-static HWND hMode, hFreqSlider, hFreqEdit, hBwSlider, hBeatSlider, hChkBeat;
+static HWND hMode, hModeReset, hFreqSlider, hFreqEdit, hBwSlider, hBeatSlider, hChkBeat;
 static HWND hVolSlider, hBalSlider;
 static HWND hPlayMin, hRestMin, hFadeMin, hMaster, hLblMaster;
 // 1.0 is the master volume as set; the fade walks it down to 0 without moving
@@ -324,6 +325,19 @@ static void InitIniPath()
     }
     IniSetInt(L"main", L"ver", CONFIG_VER);
 }
+
+// A starting point for each sound, not an answer: somewhere plain to return to
+// before tuning again, since what a sound is like depends on the speakers and
+// the ear in front of them. Every noise keeps a band width under kBwOpen, so
+// the filter is doing some shaping in each of them and the frequency counts.
+struct ModeDefault { double freq, bw; bool beat; double beatHz; };
+static const ModeDefault kModeDefault[] = {
+    { 4000.0,  kBwMax, false, 3.0 },   // sine: a plain tone, no wobble
+    { 2000.0,  0.50,   false, 3.0 },   // narrow-band: wind
+    { 4000.0,  3.50,   false, 3.0 },   // white: static
+    { 2500.0,  2.50,   false, 3.0 },   // pink: rain
+    {  900.0,  3.60,   false, 3.0 },   // brown: waves
+};
 
 static void DefaultLayers(LayerCfg L[kMaxLayers])
 {
@@ -1532,7 +1546,10 @@ static void CreateControls(HWND p)
 
     // editor for the selected layer
     MkStatic(p, 0, T(S_SOURCE), kTextX, 206, 70, 20);
-    hMode = MkCombo(p, IDC_MODE, 120, 202, kCtrlX + kCtrlW - 120, 240);
+    hMode = MkCombo(p, IDC_MODE, 120, 202, 178, 240);
+    hModeReset = MkButton(p, IDC_MODE_RESET, T(S_MODE_DEFAULT), 304, 202, 54, 24, 0);
+    SetWindowPos(hModeReset, nullptr, 0, 0, S(54), ComboItemHeight() + S(6),
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowLongPtrW(hMode, GWL_STYLE, GetWindowLongPtrW(hMode, GWL_STYLE) | WS_GROUP);
     for (int i = 0; i < 5; i++) SendMessageW(hMode, CB_ADDSTRING, 0, (LPARAM)ModeName(i));
 
@@ -1872,6 +1889,20 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (g_updating) return 0;
             const int m = (int)SendMessageW(hMode, CB_GETCURSEL, 0, 0);
             g_layer[g_sel].mode = (m < 0) ? MODE_SINE : m;
+            CommitLayerEdit();
+            return 0;
+        }
+        if (id == IDC_MODE_RESET) {
+            // Only what makes the sound what it is. Volume and balance were set
+            // by ear for this room and these speakers, so they stay.
+            LayerCfg& L = g_layer[g_sel];
+            const int m = (L.mode < 0 || L.mode > MODE_BROWN) ? MODE_SINE : L.mode;
+            const ModeDefault& d = kModeDefault[m];
+            L.freq = d.freq;
+            L.bw = d.bw;
+            L.beat = d.beat;
+            L.beatHz = d.beatHz;
+            WriteLayerToControls();
             CommitLayerEdit();
             return 0;
         }

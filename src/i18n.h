@@ -62,6 +62,7 @@
     X(S_FMT_PRESET_DELETE,  L"\"%s\" 프리셋을 삭제할까요?",          L"Delete the preset \"%s\"?")  \
     /* buttons and static labels */                                                                \
     X(S_SAVE,               L"저장",                                 L"Save")                       \
+    X(S_MODE_DEFAULT,       L"기본값",                               L"Reset")                      \
     X(S_DELETE,             L"삭제",                                 L"Delete")                     \
     X(S_CANCEL,             L"취소",                                 L"Cancel")                     \
     X(S_NAME,               L"이름",                                 L"Name")                       \
