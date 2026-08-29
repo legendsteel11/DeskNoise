@@ -1197,10 +1197,16 @@ static void EnterPhase(int phase)
     g_audio.setPlaying(phase == PHASE_PLAY);
 }
 
+// Settings used to reach the disk only on a clean exit, which lost everything
+// changed in the session if the app was killed. Written at the two points the
+// user has finished setting up: putting the window away, and starting to play.
+static void SaveSettings();
+
 static void SetSession(bool on)
 {
     g_session = on;
     if (on) {
+        SaveSettings();
         // A new session starts the count over. Stopping keeps the total on
         // screen so the last run stays readable.
         g_playedMs = 0;
@@ -1230,6 +1236,7 @@ static void HideMainWindow()
 {
     ShowWindow(g_hwnd, SW_HIDE);
     EnsureTick();
+    SaveSettings();
 }
 
 // A minimized window counts as visible, so restore it instead of hiding it.
