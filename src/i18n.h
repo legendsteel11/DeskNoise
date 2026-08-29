@@ -81,9 +81,9 @@
     X(S_PLAY,               L"재생",                                 L"Play")                       \
     X(S_STOP,               L"정지",                                 L"Stop")                       \
     X(S_REST,               L"간격",                                 L"Gap")                        \
-    X(S_FADE,               L"자동 줄임",                            L"Fade out")                   \
+    X(S_FADE,               L"자동 줄임",                            L"Fade")                       \
     /* play and rest duration combos */                                                            \
-    X(S_CONTINUOUS,         L"계속",                                 L"Continuous")                 \
+    X(S_CONTINUOUS,         L"계속",                                 L"Always")                     \
     X(S_NONE,               L"없음",                                 L"None")                       \
     X(S_FMT_MINUTES,        L"%d분",                                 L"%d min")                     \
     /* checkboxes and tray menu */                                                                 \

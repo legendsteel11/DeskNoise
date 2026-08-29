@@ -53,9 +53,9 @@ enum {
 static const int kGutterX = 24;    // checkbox / icon column
 static const int kTextX = 48;      // every title and label starts here
 static const int kCtrlX = 44;      // sliders
-static const int kCtrlW = 314;     // sliders stop at 358, inside the box border
-static const int kRightX = 378;    // right edge of content
-static const int kWinW = 402;
+static const int kCtrlW = 332;     // sliders stop at 376, inside the box border
+static const int kRightX = 396;    // right edge of content
+static const int kWinW = 420;
 static const int kWinH = 668;
 
 // Group boxes span the full content width; what they hold is inset from both
@@ -495,10 +495,10 @@ static void UpdateLayerRow(int i)
 // list instead of drifting with the text in front of them.
 struct RowCol { int x, w; UINT align; };
 static const RowCol kRowNum   = {   4, 12, DT_RIGHT };
-static const RowCol kRowName  = {  24, 74, DT_LEFT };
-static const RowCol kRowFreq  = { 102, 72, DT_RIGHT };
-static const RowCol kRowVol   = { 180, 44, DT_RIGHT };
-static const RowCol kRowExtra = { 232, 92, DT_LEFT };
+static const RowCol kRowName  = {  24, 92, DT_LEFT };
+static const RowCol kRowFreq  = { 120, 72, DT_RIGHT };
+static const RowCol kRowVol   = { 198, 44, DT_RIGHT };
+static const RowCol kRowExtra = { 250, 92, DT_LEFT };
 
 static void DrawRowCell(HDC dc, const RECT& row, const RowCol& c, LPCWSTR text)
 {
@@ -1400,6 +1400,23 @@ static void PaintFrames(HDC dc)
 // Width of a string in the UI font, given back in the same logical units the
 // layout constants use. Lets a row follow its own text instead of a fixed column,
 // which matters because a translated label is rarely the same length.
+static int TextWidth(HWND p, LPCWSTR text, HFONT font);
+
+// The widest entry a duration list will hold: slot 0 is the open-ended one,
+// the rest are minutes. Measured rather than assumed, because which minute
+// value is widest depends on the language's own format string.
+static int WidestItem(HWND p, LPCWSTR first, const int* mins, int count)
+{
+    int w = TextWidth(p, first, g_font);
+    WCHAR buf[32];
+    for (int i = 1; i < count; i++) {
+        swprintf_s(buf, T(S_FMT_MINUTES), mins[i]);
+        const int t = TextWidth(p, buf, g_font);
+        if (t > w) w = t;
+    }
+    return w;
+}
+
 static int TextWidth(HWND p, LPCWSTR text, HFONT font)
 {
     HDC dc = GetDC(p);
@@ -1512,9 +1529,9 @@ static void CreateControls(HWND p)
     const int presetComboX = kGutterX + presetLblW + 12;
     HWND lblPreset = MkStatic(p, 0, T(S_PRESET), kGutterX, 16, presetLblW, 20);
     SendMessageW(lblPreset, WM_SETFONT, (WPARAM)g_fontBold, TRUE);
-    hPresetCombo = MkCombo(p, IDC_PRESET_COMBO, presetComboX, 12, 258 - presetComboX, 260);
-    hPresetSave = MkButton(p, IDC_PRESET_SAVE, T(S_SAVE), 264, 12, 54, 24, 0);
-    hPresetDel = MkButton(p, IDC_PRESET_DEL, T(S_DELETE), 324, 12, 54, 24, 0);
+    hPresetCombo = MkCombo(p, IDC_PRESET_COMBO, presetComboX, 12, 276 - presetComboX, 260);
+    hPresetSave = MkButton(p, IDC_PRESET_SAVE, T(S_SAVE), 282, 12, 54, 24, 0);
+    hPresetDel = MkButton(p, IDC_PRESET_DEL, T(S_DELETE), 342, 12, 54, 24, 0);
 
     // The two buttons stand beside the preset combo, so they take their height
     // from it rather than a fixed one. A flat button next to a taller box reads
@@ -1546,8 +1563,8 @@ static void CreateControls(HWND p)
 
     // editor for the selected layer
     MkStatic(p, 0, T(S_SOURCE), kTextX, 206, 70, 20);
-    hMode = MkCombo(p, IDC_MODE, 120, 202, 178, 240);
-    hModeReset = MkButton(p, IDC_MODE_RESET, T(S_MODE_DEFAULT), 304, 202, 54, 24, 0);
+    hMode = MkCombo(p, IDC_MODE, 120, 202, 196, 240);
+    hModeReset = MkButton(p, IDC_MODE_RESET, T(S_MODE_DEFAULT), 322, 202, 54, 24, 0);
     SetWindowPos(hModeReset, nullptr, 0, 0, S(54), ComboItemHeight() + S(6),
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     SetWindowLongPtrW(hMode, GWL_STYLE, GetWindowLongPtrW(hMode, GWL_STYLE) | WS_GROUP);
@@ -1581,7 +1598,9 @@ static void CreateControls(HWND p)
     hLblMid = MkStatic(p, IDC_LBL_MID, T(S_BANDWIDTH), kTextX, 288, 300, 18);
     // Aligned to the title column, not to the layer checkboxes above: this row
     // is a section title that happens to carry a checkbox.
-    hChkBeat = MkButton(p, IDC_CHK_BEAT, T(S_BEAT), kTextX, 284, kRightX - kTextX, 22, BS_AUTOCHECKBOX);
+    // Stops where the sliders stop, not at kRightX: the box border runs down
+    // the outside of that, and a control reaching it erases the line.
+    hChkBeat = MkButton(p, IDC_CHK_BEAT, T(S_BEAT), kTextX, 284, kCtrlX + kCtrlW - kTextX, 22, BS_AUTOCHECKBOX);
     hBwSlider = MkSlider(p, IDC_BW_SLIDER, kCtrlX, 308, kCtrlW, 26, 0, 1000, 20);
     hBeatSlider = MkSlider(p, IDC_BEAT_SLIDER, kCtrlX, 308, kCtrlW, 26,
         BeatToPos(kBeatMin), BeatToPos(kBeatMax), 5);
@@ -1603,26 +1622,39 @@ static void CreateControls(HWND p)
     // Three label-and-combo pairs share one row. The labels are measured and the
     // leftover width is split between the combos, so a longer translation makes
     // the combos narrower instead of pushing the row off the box.
-    const int kLblGap = 5, kPairGap = 8;
+    const int kLblGap = 5, kPairGap = 6;
     const int rowRight = kCtrlX + kCtrlW;
     const int wPlay = TextWidth(p, T(S_PLAY), g_font);
     const int wRest = TextWidth(p, T(S_REST), g_font);
     const int wFade = TextWidth(p, T(S_FADE), g_font);
-    int comboW = (rowRight - kTextX - (wPlay + wRest + wFade)
-                  - kLblGap * 3 - kPairGap * 2) / 3;
-    if (comboW < 54) comboW = 54;
+
+    // The three lists do not need the same width: the play list carries
+    // "Continuous" while the other two carry "None". Splitting the row evenly
+    // made the play combo clip its own values in English. Measure what each
+    // list actually has to hold, then share out whatever is left.
+    const int kChrome = 30;   // the drop-down arrow and the padding either side
+    int cw[3] = {
+        WidestItem(p, T(S_CONTINUOUS), kPlayMin, kPlayCount) + kChrome,
+        WidestItem(p, T(S_NONE),       kRestMin, kRestCount) + kChrome,
+        WidestItem(p, T(S_NONE),       kFadeMin, kFadeCount) + kChrome,
+    };
+    const int room = rowRight - kTextX - (wPlay + wRest + wFade)
+                     - kLblGap * 3 - kPairGap * 2;
+    const int want = cw[0] + cw[1] + cw[2];
+    for (int i = 0; i < 3; i++)
+        cw[i] = (want <= room) ? cw[i] + (room - want) / 3 : cw[i] * room / want;
 
     int x = kTextX;
     MkStatic(p, 0, T(S_PLAY), x, 540, wPlay, 20);
-    hPlayMin = MkCombo(p, IDC_PLAYMIN, x + wPlay + kLblGap, 536, comboW, 260);
-    x += wPlay + kLblGap + comboW + kPairGap;
+    hPlayMin = MkCombo(p, IDC_PLAYMIN, x + wPlay + kLblGap, 536, cw[0], 260);
+    x += wPlay + kLblGap + cw[0] + kPairGap;
 
     MkStatic(p, 0, T(S_REST), x, 540, wRest, 20);
-    hRestMin = MkCombo(p, IDC_RESTMIN, x + wRest + kLblGap, 536, comboW, 260);
-    x += wRest + kLblGap + comboW + kPairGap;
+    hRestMin = MkCombo(p, IDC_RESTMIN, x + wRest + kLblGap, 536, cw[1], 260);
+    x += wRest + kLblGap + cw[1] + kPairGap;
 
     MkStatic(p, 0, T(S_FADE), x, 540, wFade, 20);
-    hFadeMin = MkCombo(p, IDC_FADEMIN, x + wFade + kLblGap, 536, comboW, 260);
+    hFadeMin = MkCombo(p, IDC_FADEMIN, x + wFade + kLblGap, 536, cw[2], 260);
     // Slot 0 is the open-ended entry; the rest are built from the minute values.
     WCHAR item[32];
     for (int i = 0; i < kPlayCount; i++) {
@@ -1644,9 +1676,9 @@ static void CreateControls(HWND p)
 
     // Play takes the width it deserves; exit is the narrowest so a stray click
     // is least likely to land on it.
-    hPlay = MkButton(p, IDC_PLAY, T(S_PLAY), kGutterX, 586, 186, 38, BS_DEFPUSHBUTTON);
-    hHide = MkButton(p, IDC_HIDE, T(S_HIDE_TRAY), 220, 586, 84, 38, 0);
-    hExit = MkButton(p, IDC_EXIT, T(S_TRAY_EXIT), 314, 586, 64, 38, 0);
+    hPlay = MkButton(p, IDC_PLAY, T(S_PLAY), kGutterX, 586, 204, 38, BS_DEFPUSHBUTTON);
+    hHide = MkButton(p, IDC_HIDE, T(S_HIDE_TRAY), 238, 586, 84, 38, 0);
+    hExit = MkButton(p, IDC_EXIT, T(S_TRAY_EXIT), 332, 586, 64, 38, 0);
 
     // Status bar. Its rule spans the whole window, unlike the boxes above.
     // Playing time on the left, message and countdown right-aligned.
