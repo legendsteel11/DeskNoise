@@ -28,7 +28,7 @@
     X(S_FMT_MASTER_FADE,    L"전체 음량 : %d%%  ·  자동 줄임 설정됨", L"Master volume: %d%%  ·  fade out set") \
     /* status line */                                                                              \
     X(S_STOPPED,            L"정지됨",                               L"Stopped")                    \
-    X(S_RESTING,            L"휴식 중",                              L"Resting")                    \
+    X(S_RESTING,            L"대기 중",                              L"Waiting")                    \
     /* the status bar is one line now, so these stay short */                                      \
     X(S_NO_DEVICE,          L"출력 장치 없음 · 연결되면 재생",       L"No output device · resumes when connected") \
     X(S_NO_LAYER,           L"소리 없음 · 레이어를 체크해 주세요",   L"Nothing playing · check a layer") \
@@ -36,7 +36,7 @@
     X(S_LIMITING,           L" · 출력 한계, 음량을 낮춰 주세요",     L" · output limit, lower the volume") \
     X(S_PLAYING,            L"재생 중",                              L"Playing")                    \
     X(S_FMT_TIME_PLAY,      L" · %d:%02d 후 재생",                   L" · plays in %d:%02d")        \
-    X(S_FMT_TIME_REST,      L" · %d:%02d 후 휴식",                   L" · rests in %d:%02d")        \
+    X(S_FMT_TIME_REST,      L" · %d:%02d 후 대기",                   L" · waits in %d:%02d")        \
     X(S_FMT_TIME_STOP,      L" · %d:%02d 후 정지",                   L" · stops in %d:%02d")        \
     /* left-hand side of the status bar: how long this session has been playing */                 \
     X(S_FMT_PLAYED_MIN,     L"재생시간 %d분",                        L"played %d min")              \
@@ -79,7 +79,7 @@
     X(S_MASTER,             L"전체 음량",                            L"Master volume")              \
     X(S_PLAY,               L"재생",                                 L"Play")                       \
     X(S_STOP,               L"정지",                                 L"Stop")                       \
-    X(S_REST,               L"휴식",                                 L"Rest")                       \
+    X(S_REST,               L"간격",                                 L"Gap")                        \
     X(S_FADE,               L"자동 줄임",                            L"Fade out")                   \
     /* play and rest duration combos */                                                            \
     X(S_CONTINUOUS,         L"계속",                                 L"Continuous")                 \
