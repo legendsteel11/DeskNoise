@@ -69,6 +69,14 @@ Visual Studio 설치 경로가 기본값과 다르면 `build.bat` 위쪽의 `VS`
 | `src/i18n.h`, `src/i18n.cpp` | 모든 UI 문자열, 한국어와 영어를 나란히 관리 |
 | `src/app.rc`, `src/resource.h` | 아이콘, 매니페스트, 버전 정보, 프리셋 이름 대화상자 |
 
+## 같은 개발자의 다른 도구
+
+- [TabStick](https://tabstick.com/), 창에 붙는 인덱스 메모.
+- [Edgetree](https://edgetree.vercel.app/), 화면 가장자리에 고정되는 VS Code
+  탐색기 방식의 파일 탐색 유틸리티.
+- [SweepCap](https://sweepcap.vercel.app/), 드래그가 곧 캡처가 되는 캡처
+  유틸리티.
+
 ## 라이선스
 
 라이선스는 MIT입니다. [LICENSE](LICENSE)를 참고하십시오.

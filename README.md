@@ -73,6 +73,15 @@ Settings and presets are kept in `%APPDATA%\DeskNoise\config.ini`.
 | `src/i18n.h`, `src/i18n.cpp` | Every UI string, Korean and English side by side. |
 | `src/app.rc`, `src/resource.h` | Icon, manifest, version and the preset-name dialog. |
 
+## Other tools by the same maker
+
+- [TabStick](https://tabstick.com/), sticky index notes that attach to
+  windows.
+- [Edgetree](https://edgetree.vercel.app/), a VS Code explorer-style file
+  browser docked to the screen edge.
+- [SweepCap](https://sweepcap.vercel.app/), a capture utility where the drag
+  itself is the capture.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
