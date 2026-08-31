@@ -41,4 +41,4 @@
 // landing page where there is one, its repository otherwise.
 #define APP_EDGETREE_URL  L"https://edgetree.vercel.app/"
 #define APP_TABSTICK_URL  L"https://tabstick.com"
-#define APP_SWEEPCAP_URL  L"https://github.com/legendsteel11/SweepCap"
+#define APP_SWEEPCAP_URL  L"https://sweepcap.vercel.app/"
